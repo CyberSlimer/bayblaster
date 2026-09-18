@@ -1,0 +1,494 @@
+import SpriteKit
+
+/// One run: aim → fly → results. Owns the camera, world, player, spawner and HUD.
+final class GameScene: SKScene, SKPhysicsContactDelegate {
+
+    enum Phase { case aiming, flying, ended }
+
+    /// Feedback requests from entities (see WorldEntity.apply).
+    enum JuiceKind { case bump, whale, motor, hurt, net }
+
+    private var phase: Phase = .aiming
+    private let cam = GameCamera()
+    private let world = SKNode()
+    private let config: UpgradeConfig
+    private let skipSystem = WaterSkipSystem()
+
+    private var player: Player!
+    private var launcher: Launcher!
+    private var hud: HUD!
+    private var background: Background!
+    private var spawner: WorldSpawner!
+    private var splashTemplate: SKEmitterNode!
+    private var resultsOverlay: SKNode?
+
+    private var didBuild = false
+    private var lastUpdateTime: TimeInterval = 0
+    private var runCoins = 0
+    private var distanceMetres: CGFloat = 0
+    private var coinedMetres = 0
+    private var skipsThisRun = 0
+    private var flyingSeconds: CGFloat = 0
+
+    private var holdTouch: UITouch?
+    private var touchDownTime: TimeInterval = 0
+    private static let tapHoldThreshold: TimeInterval = 0.18
+
+    private var pendingOneShots: [WorldEntity] = []
+    private var pendingZoneChanges: [(entity: WorldEntity, entered: Bool)] = []
+
+    // MARK: - Lifecycle
+
+    override init(size: CGSize) {
+        config = UpgradeConfig(save: SaveManager.shared.data)
+        super.init(size: size)
+        scaleMode = .resizeFill
+    }
+
+    required init?(coder aDecoder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override func didMove(to view: SKView) {
+        Art.view = view
+        AudioManager.shared.warmUp()
+        Haptics.prepare()
+        backgroundColor = UIColor(red: 0.35, green: 0.65, blue: 0.95, alpha: 1)
+        physicsWorld.gravity = .zero            // gravity is integrated in Player.update
+        physicsWorld.contactDelegate = self
+        if !didBuild { build() }
+        layoutHUD()
+    }
+
+    private func build() {
+        didBuild = true
+        addChild(world)
+
+        camera = cam
+        addChild(cam)
+        cam.configure(sceneSize: size)
+
+        background = Background(scene: self, camera: cam)
+
+        launcher = Launcher()
+        world.addChild(launcher)
+
+        player = Player(config: config)
+        player.attachEmitters(to: self)
+        world.addChild(player)
+        placePlayerAtMuzzle()
+
+        spawner = WorldSpawner(world: world, config: config)
+
+        hud = HUD()
+        cam.addChild(hud)
+        hud.setAimWidgets(visible: true)
+        hud.showHint("TAP to lock the angle")
+        hud.setRockets(player.rockets)
+        hud.setCoins(0)
+        hud.setDistance(0)
+        hud.setHull(fraction: 1)
+
+        splashTemplate = GameScene.makeSplashTemplate()
+        cam.snap(to: player.position)
+    }
+
+    override func didChangeSize(_ oldSize: CGSize) {
+        guard didBuild else { return }
+        cam.configure(sceneSize: size)
+        background.layout(sceneSize: size)
+        layoutHUD()
+    }
+
+    private func layoutHUD() {
+        hud?.layout(sceneSize: size, insets: view?.safeAreaInsets ?? .zero)
+    }
+
+    private func placePlayerAtMuzzle() {
+        let m = launcher.muzzlePoint
+        player.position = CGPoint(x: m.x - 6, y: m.y)
+        player.visual.zRotation = launcher.barrelAngle
+    }
+
+    // MARK: - Frame loop
+
+    override func update(_ currentTime: TimeInterval) {
+        var dt = CGFloat(currentTime - lastUpdateTime)
+        if lastUpdateTime == 0 || dt > Tuning.maxDeltaTime { dt = Tuning.maxDeltaTime }
+        if dt < 0 { dt = 0 }
+        lastUpdateTime = currentTime
+
+        switch phase {
+        case .aiming:
+            launcher.update(dt: dt, launchSpeed: config.launchSpeed)
+            placePlayerAtMuzzle()
+            hud.setAim(angleDegrees: launcher.angleDegrees, power: launcher.power,
+                       showPower: launcher.aimState == .sweepingPower)
+            player.update(dt: dt)
+            cam.follow(target: player.position, velocity: .zero, dt: dt)
+            background.update(camera: cam, distanceMetres: 0, dt: dt)
+
+        case .flying:
+            player.isDiving = holdTouch != nil && (currentTime - touchDownTime) >= GameScene.tapHoldThreshold
+            player.update(dt: dt)
+            if player.state == .flying { flyingSeconds += dt }
+            spawner.update(playerX: player.position.x)
+            updateDistance()
+            cam.follow(target: player.position, velocity: player.velocity, dt: dt)
+            background.update(camera: cam, distanceMetres: distanceMetres, dt: dt)
+            hud.setDistance(distanceMetres)
+            hud.setCoins(runCoins)
+            hud.setRockets(player.rockets)
+            hud.setHull(fraction: player.hullFraction)
+            checkRunEnd()
+
+        case .ended:
+            player.update(dt: dt)
+            cam.follow(target: player.position, velocity: player.velocity, dt: dt)
+            background.update(camera: cam, distanceMetres: distanceMetres, dt: dt)
+        }
+    }
+
+    override func didSimulatePhysics() {
+        guard phase == .flying else { return }
+        if let outcome = skipSystem.resolve(player: player) { handle(outcome) }
+        processContacts()
+    }
+
+    private func updateDistance() {
+        let metres = max(0, (player.position.x - Tuning.launchX) / Tuning.pointsPerMeter)
+        distanceMetres = max(distanceMetres, metres)
+        let whole = Int(distanceMetres)
+        if whole > coinedMetres {
+            runCoins += (whole - coinedMetres) * Tuning.coinsPerMeter
+            coinedMetres = whole
+        }
+    }
+
+    private func checkRunEnd() {
+        switch player.state {
+        case .plowing where player.velocity.dx < Tuning.runEndSpeed:
+            endRun(sunk: false)
+        case .sunk:
+            endRun(sunk: true)
+        default:
+            // Safety valve: a run should never last this long.
+            if flyingSeconds > 180 { endRun(sunk: false) }
+        }
+    }
+
+    // MARK: - Water
+
+    private func handle(_ outcome: WaterSkipSystem.Outcome) {
+        switch outcome {
+        case .skipped(let impactSpeed, let hard, let damage):
+            skipsThisRun += 1
+            splash(at: player.position, intensity: clamp(impactSpeed / 1800, 0.3, 1.2))
+            AudioManager.shared.play(.splash, volume: 0.7)
+            Haptics.skip()
+            if skipsThisRun % 3 == 0 {
+                FloatingLabel.show("SKIP ×\(skipsThisRun)", at: player.position + CGPoint(x: 0, y: 40), in: world,
+                                   color: UIColor(red: 0.7, green: 0.95, blue: 1, alpha: 1), fontSize: 22)
+            }
+            if hard {
+                cam.shake(Tuning.hardImpactShake)
+                Haptics.heavy()
+                damagePlayer(damage, shake: 0)
+            }
+        case .plowed(let impactSpeed, let hard, let damage):
+            splash(at: player.position, intensity: clamp(impactSpeed / 1400, 0.5, 1.5))
+            AudioManager.shared.play(.splash, volume: 1)
+            Haptics.medium()
+            cam.shake(hard ? Tuning.hardImpactShake : 5)
+            if hard {
+                Haptics.heavy()
+                damagePlayer(damage, shake: 0)
+            }
+        }
+    }
+
+    // MARK: - Contacts (queued; applied in didSimulatePhysics)
+
+    func didBegin(_ contact: SKPhysicsContact) {
+        guard let entity = entity(in: contact) else { return }
+        if entity.kind.spec.isZone {
+            pendingZoneChanges.append((entity: entity, entered: true))
+        } else {
+            pendingOneShots.append(entity)
+        }
+    }
+
+    func didEnd(_ contact: SKPhysicsContact) {
+        guard let entity = entity(in: contact), entity.kind.spec.isZone else { return }
+        pendingZoneChanges.append((entity: entity, entered: false))
+    }
+
+    private func entity(in contact: SKPhysicsContact) -> WorldEntity? {
+        (contact.bodyA.node as? WorldEntity) ?? (contact.bodyB.node as? WorldEntity)
+    }
+
+    private func processContacts() {
+        let zones = pendingZoneChanges
+        pendingZoneChanges.removeAll()
+        for change in zones {
+            if change.entered { change.entity.enterZone(player: player) } else { change.entity.exitZone(player: player) }
+        }
+        let hits = pendingOneShots
+        pendingOneShots.removeAll()
+        for e in hits where phase == .flying {
+            e.apply(to: player, in: self)
+        }
+    }
+
+    // MARK: - Entity callbacks
+
+    func awardCoins(_ amount: Int, at position: CGPoint) {
+        runCoins += amount
+        FloatingLabel.show("+\(amount)", at: position, in: world)
+        AudioManager.shared.play(.coin)
+        Haptics.medium(0.6)
+    }
+
+    func damagePlayer(_ amount: CGFloat, shake: CGFloat) {
+        guard phase == .flying else { return }
+        if shake > 0 { cam.shake(shake) }
+        let sunk = player.applyDamage(amount)
+        hud.setHull(fraction: player.hullFraction)
+        FloatingLabel.show("-\(Int(amount))", at: player.position + CGPoint(x: 0, y: 30), in: world,
+                           color: UIColor(red: 1, green: 0.4, blue: 0.35, alpha: 1), fontSize: 22)
+        if sunk {
+            player.sink()
+            splash(at: player.position, intensity: 1.6)
+            AudioManager.shared.play(.sink)
+            Haptics.failure()
+            endRun(sunk: true)
+        }
+    }
+
+    func juice(_ kind: JuiceKind, at position: CGPoint) {
+        switch kind {
+        case .bump:
+            AudioManager.shared.play(.bump)
+            Haptics.medium()
+            splash(at: position, intensity: 0.6)
+            FloatingLabel.show("BOING!", at: position + CGPoint(x: 0, y: 50), in: world, color: .white, fontSize: 22)
+        case .whale:
+            AudioManager.shared.play(.whale)
+            Haptics.medium()
+            splash(at: position, intensity: 1.4)
+            FloatingLabel.show("SPOUT!", at: position + CGPoint(x: 0, y: 90), in: world, color: UIColor(red: 0.7, green: 0.95, blue: 1, alpha: 1))
+        case .motor:
+            AudioManager.shared.play(.rocket, volume: 0.8)
+            Haptics.medium(0.8)
+            FloatingLabel.show("VROOM!", at: position + CGPoint(x: 0, y: 40), in: world, color: UIColor(red: 1, green: 0.8, blue: 0.3, alpha: 1))
+        case .hurt:
+            AudioManager.shared.play(.hurt)
+            Haptics.heavy()
+        case .net:
+            AudioManager.shared.play(.splash, volume: 0.5)
+            Haptics.medium()
+            FloatingLabel.show("TANGLED", at: position + CGPoint(x: 0, y: 40), in: world, color: UIColor(red: 1, green: 0.6, blue: 0.4, alpha: 1), fontSize: 20)
+        }
+    }
+
+    // MARK: - Input
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let touch = touches.first else { return }
+        switch phase {
+        case .aiming:
+            switch launcher.aimState {
+            case .sweepingAngle:
+                launcher.lockAngle()
+                Haptics.lock()
+                AudioManager.shared.play(.lock)
+                hud.showHint("TAP to lock the power")
+            case .sweepingPower:
+                launcher.lockPower()
+                Haptics.lock()
+                fire()
+            case .fired:
+                break
+            }
+        case .flying:
+            if holdTouch == nil {
+                holdTouch = touch
+                touchDownTime = touch.timestamp
+            }
+        case .ended:
+            break
+        }
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        releaseTouch(touches)
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        releaseTouch(touches)
+    }
+
+    private func releaseTouch(_ touches: Set<UITouch>) {
+        guard let held = holdTouch, touches.contains(held) else { return }
+        let heldFor = held.timestamp - touchDownTime
+        holdTouch = nil
+        player.isDiving = false
+        if phase == .flying, heldFor < GameScene.tapHoldThreshold {
+            fireRocket()
+        }
+    }
+
+    private func fireRocket() {
+        if player.fireRocket() {
+            AudioManager.shared.play(.rocket)
+            Haptics.medium()
+            cam.shake(4)
+            hud.setRockets(player.rockets)
+            FloatingLabel.show("ROCKET!", at: player.position + CGPoint(x: 0, y: 44), in: world,
+                               color: UIColor(red: 1, green: 0.6, blue: 0.2, alpha: 1), fontSize: 22)
+        } else if player.state == .flying {
+            AudioManager.shared.play(.tick, volume: 0.4)
+        }
+    }
+
+    private func fire() {
+        let speed = config.launchSpeed * lerp(Tuning.minPowerFraction, 1, launcher.power)
+        let a = launcher.barrelAngle
+        player.launch(velocity: CGVector(dx: cos(a) * speed, dy: sin(a) * speed))
+        player.visual.zRotation = a
+        launcher.fire()
+        phase = .flying
+        hud.setAimWidgets(visible: false)
+        hud.showHint(nil)
+        cam.shake(7)
+        Haptics.heavy()
+        AudioManager.shared.play(.launch)
+    }
+
+    // MARK: - Run end + results
+
+    private func endRun(sunk: Bool) {
+        guard phase == .flying else { return }
+        phase = .ended
+        holdTouch = nil
+        player.isDiving = false
+        player.endFlightSegment()
+        hud.setDistance(distanceMetres)
+        hud.setCoins(runCoins)
+
+        let isNewBest = SaveManager.shared.recordRun(distance: Double(distanceMetres),
+                                                     coins: runCoins,
+                                                     longestFlight: Double(player.longestFlightTime))
+        run(.sequence([
+            .wait(forDuration: sunk ? 1.4 : 0.7),
+            .run { [weak self] in self?.showResults(sunk: sunk, newBest: isNewBest) }
+        ]))
+    }
+
+    private func showResults(sunk: Bool, newBest: Bool) {
+        let overlay = SKNode()
+        overlay.zPosition = 2000
+        let panel = PanelNode(size: CGSize(width: 460, height: 272))
+        overlay.addChild(panel)
+
+        let title = SKLabelNode.make(sunk ? "GLUG GLUG… SUNK!" : "SPLASHDOWN!", size: 26, font: Tuning.fontHeavy,
+                                     color: sunk ? UIColor(red: 1, green: 0.5, blue: 0.4, alpha: 1) : UIColor(red: 0.6, green: 0.95, blue: 1, alpha: 1))
+        title.position = CGPoint(x: 0, y: 104)
+        panel.addChild(title)
+
+        let distance = SKLabelNode.make("0 m", size: 52, font: Tuning.fontHeavy)
+        distance.position = CGPoint(x: 0, y: 52)
+        panel.addChild(distance)
+        let finalMetres = Int(distanceMetres)
+        distance.run(.customAction(withDuration: Tuning.resultsCountUpDuration) { node, elapsed in
+            let t = CGFloat(elapsed) / CGFloat(Tuning.resultsCountUpDuration)
+            let eased = 1 - pow(1 - min(t, 1), 3)
+            (node as? SKLabelNode)?.text = "\(Int(CGFloat(finalMetres) * eased)) m"
+        })
+
+        let coins = SKLabelNode.make("+\(runCoins) coins   ·   \(skipsThisRun) skips", size: 20,
+                                     color: UIColor(red: 1, green: 0.9, blue: 0.4, alpha: 1))
+        coins.position = CGPoint(x: 0, y: 12)
+        panel.addChild(coins)
+
+        if newBest {
+            let best = SKLabelNode.make("★ NEW BEST ★", size: 22, font: Tuning.fontHeavy, color: UIColor(red: 1, green: 0.75, blue: 0.2, alpha: 1))
+            best.position = CGPoint(x: 0, y: -20)
+            best.setScale(0.1)
+            panel.addChild(best)
+            best.run(.sequence([
+                .wait(forDuration: Tuning.resultsCountUpDuration * 0.8),
+                .run { Haptics.success(); AudioManager.shared.play(.purchase) },
+                .scale(to: 1.2, duration: 0.2),
+                .scale(to: 1, duration: 0.1),
+                .repeatForever(.sequence([.scale(to: 1.06, duration: 0.5), .scale(to: 1, duration: 0.5)]))
+            ]))
+        } else {
+            let best = SKLabelNode.make("Best: \(Int(SaveManager.shared.data.bestDistance)) m", size: 18,
+                                        color: UIColor.white.withAlphaComponent(0.7))
+            best.position = CGPoint(x: 0, y: -20)
+            panel.addChild(best)
+        }
+
+        let again = ButtonNode(text: "LAUNCH AGAIN", size: CGSize(width: 200, height: 54), color: UIColor(red: 0.95, green: 0.45, blue: 0.2, alpha: 1))
+        again.position = CGPoint(x: -110, y: -84)
+        again.action = { [weak self] in
+            guard let self = self else { return }
+            SceneRouter.present(GameScene(size: self.size), from: self)
+        }
+        panel.addChild(again)
+
+        let shop = ButtonNode(text: "SHOP", size: CGSize(width: 200, height: 54), color: UIColor(red: 0.25, green: 0.6, blue: 0.95, alpha: 1))
+        shop.position = CGPoint(x: 110, y: -84)
+        shop.action = { [weak self] in
+            guard let self = self else { return }
+            SceneRouter.present(ShopScene(size: self.size), from: self, reveal: true)
+        }
+        panel.addChild(shop)
+
+        overlay.setScale(0.7)
+        overlay.alpha = 0
+        cam.addChild(overlay)
+        overlay.run(.group([.fadeIn(withDuration: 0.25), .scale(to: 1, duration: 0.3)]))
+        resultsOverlay = overlay
+    }
+
+    // MARK: - Splash particles
+
+    private static func makeSplashTemplate() -> SKEmitterNode {
+        let e = SKEmitterNode()
+        e.particleTexture = Art.particleTexture
+        e.particleBirthRate = 900
+        e.numParticlesToEmit = 30
+        e.particleLifetime = 0.7
+        e.particleLifetimeRange = 0.3
+        e.particleSpeed = 300
+        e.particleSpeedRange = 140
+        e.emissionAngle = .pi / 2
+        e.emissionAngleRange = 1.3
+        e.yAcceleration = -900
+        e.particleAlpha = 0.95
+        e.particleAlphaSpeed = -1.3
+        e.particleScale = 0.9
+        e.particleScaleRange = 0.4
+        e.particleScaleSpeed = -0.7
+        e.particleColor = UIColor(red: 0.85, green: 0.95, blue: 1, alpha: 1)
+        e.particleColorBlendFactor = 1
+        e.zPosition = 45
+        return e
+    }
+
+    private func splash(at position: CGPoint, intensity: CGFloat) {
+        guard let e = splashTemplate.copy() as? SKEmitterNode else { return }
+        e.position = CGPoint(x: position.x, y: Tuning.waterY)
+        e.numParticlesToEmit = Int(30 * intensity)
+        e.particleSpeed = 300 * intensity
+        e.particleScale = 0.9 * clamp(intensity, 0.5, 1.4)
+        world.addChild(e)
+        e.run(.sequence([.wait(forDuration: 1.5), .removeFromParent()]))
+    }
+}
+
+// MARK: - CGPoint helpers
+
+extension CGPoint {
+    static func + (a: CGPoint, b: CGPoint) -> CGPoint { CGPoint(x: a.x + b.x, y: a.y + b.y) }
+}

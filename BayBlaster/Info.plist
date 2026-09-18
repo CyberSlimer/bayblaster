@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Lets ProMotion iPhones run SpriteKit at 120 Hz (preferredFramesPerSecond = 120 is capped at 60 without this).
+	     Orientation (landscape only) is set in the target's build settings (INFOPLIST_KEY_UISupportedInterfaceOrientations*). -->
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+</dict>
+</plist>
