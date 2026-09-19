@@ -49,6 +49,10 @@ enum Tuning {
     static let runEndSpeed: CGFloat = 45              // plowing slower than this ends the run
     static let hardImpactDamagePer100: CGFloat = 6    // hull damage per 100 pt/s over the hull's threshold
     static let hardImpactShake: CGFloat = 14          // camera shake (points) on a hard impact
+    static let skipComboCoinStep = 3                  // coins awarded per skip = step × current combo length
+    static let perfectSkipAngleDegrees: CGFloat = 22  // impact angle under this is a PERFECT skip. Each skip flattens the next landing, so a flat launch earns these mid-combo; diving (steeper) trades them for a wider skip window.
+    static let perfectSkipSpeedBonus: CGFloat = 1.04  // horizontal speed multiplier on a perfect skip (on top of retention)
+    static let perfectSkipCoins = 15
 
     // MARK: - Launcher (aim phase)
     static let launchAngleMinDegrees: CGFloat = 15
@@ -86,6 +90,12 @@ enum Tuning {
     static let hazardFractionAt5000m: CGFloat = 0.50  // …ramping linearly to this at 5,000 m
     static let densityRampMeters: CGFloat = 4000      // object density rises over this distance…
     static let densityRampMax: CGFloat = 0.6          // …to (1 + this) × base density
+    static let hazardRepeatPenalty: CGFloat = 0.45    // hazard chance is multiplied by this right after a hazard (no unfair walls)
+    static let coinArcChance: CGFloat = 0.22          // share of boost spawns that become a coin arc instead of a single item
+    static let coinArcCount: ClosedRange<Int> = 6...9 // coins per arc
+    static let coinArcSpacing: CGFloat = 46           // horizontal gap between coins in an arc (points)
+    static let coinArcHeightRange: ClosedRange<CGFloat> = 80...420 // arc peak height above the water
+    static let coinArcRise: CGFloat = 90              // how much the arc curves (0 = flat line)
 
     // MARK: - Entity effects
     static let buoyBounceSpeed: CGFloat = 520         // upward speed added by a buoy
@@ -105,6 +115,20 @@ enum Tuning {
     static let sharkKnockUp: CGFloat = 200
     static let sharkDamage: CGFloat = 20
     static let stormCloudPush: CGFloat = 700          // pt/s² downward inside a storm cloud
+    static let coinValue = 5                          // one small coin in a coin arc
+    static let mineDamage: CGFloat = 35               // sea mine: big hull hit…
+    static let mineKnockUp: CGFloat = 650             // …but the blast throws the boat back into the air (risk/reward)
+    static let mineSpeedMultiplier: CGFloat = 0.8
+    static let jellyfishDamage: CGFloat = 10
+    static let jellyfishVerticalMultiplier: CGFloat = 0.5
+    static let jellyfishStunSeconds: CGFloat = 1.5    // no rockets / no dive while stung
+    static let whirlpoolPull: CGFloat = 900           // pt/s² downward while over a whirlpool
+    static let whirlpoolDrag: CGFloat = 0.35          // extra per-second horizontal drag while over a whirlpool
+    static let dolphinBounceUp: CGFloat = 700         // dolphin ride: moderate up…
+    static let dolphinPushForward: CGFloat = 260      // …and a solid forward shove, keeps all horizontal speed
+    static let balloonFloatSeconds: CGFloat = 2.2     // popping balloons cuts gravity for this long
+    static let balloonGravityMultiplier: CGFloat = 0.3
+    static let balloonLift: CGFloat = 220             // instant upward kick when the balloons pop
 
     // MARK: - Economy
     static let coinsPerMeter = 1
@@ -121,6 +145,10 @@ enum Tuning {
     static let airDragByTier: [CGFloat]              = [0.12, 0.10, 0.085, 0.07, 0.055, 0.04] // per second
     static let luckyLureByTier: [CGFloat]            = [1.0, 1.25, 1.5, 1.8, 2.1, 2.5]       // boost-weight multiplier
     static let basePrices: [UpgradeKind: Int]        = [.launcher: 260, .hull: 200, .rockets: 320, .aero: 360, .lure: 220]
+
+    // MARK: - Milestones
+    static let milestoneIntervalMeters: CGFloat = 250 // a flag every this many metres
+    static let milestoneSpawnAhead: CGFloat = 5000    // place flags this far ahead of the boat (points)
 
     // MARK: - Presentation
     static let dayNightMeters: CGFloat = 3000         // sky is fully night after this distance

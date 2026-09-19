@@ -39,7 +39,8 @@ target to landscape in *General → Deployment Info*.
 | Boat, hull, rockets, gravity/drag integration | `Gameplay/Player.swift` |
 | Skip-vs-plow water resolution | `Gameplay/WaterSkipSystem.swift` |
 | Boost / hazard definitions and effects | `Gameplay/Entities.swift` |
-| Procedural spawning | `Gameplay/WorldSpawner.swift` |
+| Procedural spawning, coin arcs, hazard spacing | `Gameplay/WorldSpawner.swift` |
+| Distance flags + "your best" flag | `Gameplay/Milestones.swift` |
 | Camera lead / zoom / shake | `Gameplay/GameCamera.swift` |
 | Aim phase cannon | `Gameplay/Launcher.swift` |
 | In-flight HUD, floating labels | `Gameplay/HUD.swift` |
@@ -50,8 +51,9 @@ target to landscape in *General → Deployment Info*.
 ## Swapping placeholder art for real sprites
 
 Add a PNG to `Assets.xcassets` named exactly like the key used in code — `boat`, `fish`,
-`buoy`, `whaleSpout`, `motor`, `birdFlock`, `coinBag`, `fuelCan`, `rock`, `net`, `shark`,
-`stormCloud`, `lighthouse`, `cannon`, `cloud`, `coinIcon`, `rocketIcon`. `Art.sprite(key)`
+`buoy`, `whaleSpout`, `motor`, `birdFlock`, `coinBag`, `fuelCan`, `coin`, `dolphin`, `balloon`,
+`rock`, `net`, `shark`, `stormCloud`, `mine`, `jellyfish`, `whirlpool`, `flag`, `bestFlag`,
+`lighthouse`, `cannon`, `cloud`, `coinIcon`, `rocketIcon`. `Art.sprite(key)`
 finds it and uses it; no code changes. Keep the image centred on the same origin the
 placeholder uses (the boat's waterline, the cannon's pivot, etc.).
 

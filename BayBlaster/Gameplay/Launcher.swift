@@ -84,13 +84,27 @@ final class Launcher: SKNode {
         guard aimState == .sweepingAngle else { return }
         aimState = .sweepingPower
         clock = 0
+        #if DEBUG
+        if let forced = Launcher.debugForcedAngle { angleDegrees = forced; updateBarrel() }
+        #endif
         barrel.run(.sequence([.scale(to: 1.08, duration: 0.06), .scale(to: 1, duration: 0.1)]))
     }
 
     func lockPower() {
         guard aimState == .sweepingPower else { return }
         aimState = .fired
+        #if DEBUG
+        if let forced = Launcher.debugForcedPower { power = forced }
+        #endif
     }
+
+    #if DEBUG
+    /// Test hook: launch the app with `SIMCTL_CHILD_BB_ANGLE=35 SIMCTL_CHILD_BB_POWER=1` (or set the
+    /// env vars in the Xcode scheme) and every lock uses those values instead of the sweep, so
+    /// automated runs and screenshots are reproducible. Debug builds only.
+    private static let debugForcedAngle: CGFloat? = ProcessInfo.processInfo.environment["BB_ANGLE"].flatMap { Double($0) }.map { CGFloat($0) }
+    private static let debugForcedPower: CGFloat? = ProcessInfo.processInfo.environment["BB_POWER"].flatMap { Double($0) }.map { CGFloat($0) }
+    #endif
 
     /// Recoil + flash. Call right after the boat leaves.
     func fire() {

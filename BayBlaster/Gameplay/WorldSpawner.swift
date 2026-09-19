@@ -8,6 +8,7 @@ final class WorldSpawner {
     private var entities: [WorldEntity] = []
     private var nextSpawnX: CGFloat = Tuning.spawnStartX
     private let boostWeightMultiplier: CGFloat
+    private var lastWasWaterHazard = false
 
     init(world: SKNode, config: UpgradeConfig) {
         self.world = world
@@ -37,14 +38,42 @@ final class WorldSpawner {
     private func spawn(at x: CGFloat) {
         guard let world = world else { return }
         let metres = x / Tuning.pointsPerMeter
-        let hazardFraction = lerp(Tuning.hazardFractionStart, Tuning.hazardFractionAt5000m, clamp(metres / 5000, 0, 1))
+        var hazardFraction = lerp(Tuning.hazardFractionStart, Tuning.hazardFractionAt5000m, clamp(metres / 5000, 0, 1))
+        // Two waterline hazards in a row make a wall the player can't do anything about.
+        if lastWasWaterHazard { hazardFraction *= Tuning.hazardRepeatPenalty }
         let boostShare = (1 - hazardFraction) * boostWeightMultiplier
         let isBoost = CGFloat.random(in: 0..<1) < boostShare / (boostShare + hazardFraction)
-        let kind = WorldSpawner.pick(from: isBoost ? EntityKind.boosts : EntityKind.hazards)
 
+        if isBoost, CGFloat.random(in: 0..<1) < Tuning.coinArcChance {
+            spawnCoinArc(at: x, in: world)
+            lastWasWaterHazard = false
+            return
+        }
+
+        let kind = WorldSpawner.pick(from: isBoost ? EntityKind.boosts : EntityKind.hazards)
+        lastWasWaterHazard = kind.isWaterHazard
+        place(kind, at: CGPoint(x: x, y: Tuning.waterY + CGFloat.random(in: kind.spec.heightRange)), in: world)
+    }
+
+    /// A gentle parabola of small coins — a line the player can *aim* for. The arc peaks in the
+    /// middle so following it through rewards a well-timed rocket or dive.
+    private func spawnCoinArc(at x: CGFloat, in world: SKNode) {
+        let count = Int.random(in: Tuning.coinArcCount)
+        let peak = Tuning.waterY + CGFloat.random(in: Tuning.coinArcHeightRange)
+        let rise = Tuning.coinArcRise * CGFloat.random(in: 0.5...1.2)
+        for i in 0..<count {
+            let t = CGFloat(i) / CGFloat(max(count - 1, 1))       // 0…1 along the arc
+            let curve = 1 - pow((t - 0.5) * 2, 2)                  // 0 at ends, 1 in the middle
+            let y = max(peak - rise + rise * curve, Tuning.waterY + 30)
+            place(.coin, at: CGPoint(x: x + CGFloat(i) * Tuning.coinArcSpacing, y: y), in: world)
+        }
+        // Skip ahead so the next spawn doesn't land inside the arc.
+        nextSpawnX += CGFloat(count) * Tuning.coinArcSpacing
+    }
+
+    private func place(_ kind: EntityKind, at position: CGPoint, in world: SKNode) {
         let entity = WorldEntity(kind: kind)
-        let spec = kind.spec
-        entity.position = CGPoint(x: x, y: Tuning.waterY + CGFloat.random(in: spec.heightRange))
+        entity.position = position
         world.addChild(entity)
         entities.append(entity)
     }
@@ -63,5 +92,6 @@ final class WorldSpawner {
         for e in entities { e.removeFromParent() }
         entities.removeAll()
         nextSpawnX = Tuning.spawnStartX
+        lastWasWaterHazard = false
     }
 }

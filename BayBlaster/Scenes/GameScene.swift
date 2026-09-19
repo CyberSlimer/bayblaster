@@ -6,7 +6,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     enum Phase { case aiming, flying, ended }
 
     /// Feedback requests from entities (see WorldEntity.apply).
-    enum JuiceKind { case bump, whale, motor, hurt, net }
+    enum JuiceKind { case bump, whale, motor, hurt, net, dolphin, balloon, explosion, sting }
 
     private var phase: Phase = .aiming
     private let cam = GameCamera()
@@ -19,6 +19,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var hud: HUD!
     private var background: Background!
     private var spawner: WorldSpawner!
+    private var milestones: Milestones!
     private var splashTemplate: SKEmitterNode!
     private var resultsOverlay: SKNode?
 
@@ -28,6 +29,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var distanceMetres: CGFloat = 0
     private var coinedMetres = 0
     private var skipsThisRun = 0
+    private var skipCombo = 0            // consecutive skips since the last plow
+    private var bestCombo = 0
+    private var perfectSkips = 0
     private var flyingSeconds: CGFloat = 0
 
     private var holdTouch: UITouch?
@@ -77,6 +81,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         placePlayerAtMuzzle()
 
         spawner = WorldSpawner(world: world, config: config)
+        milestones = Milestones(world: world, bestDistance: CGFloat(SaveManager.shared.data.bestDistance))
+        milestones.onPass = { [weak self] metres, isBest in self?.passedMilestone(metres: metres, isBest: isBest) }
 
         hud = HUD()
         cam.addChild(hud)
@@ -131,6 +137,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             player.update(dt: dt)
             if player.state == .flying { flyingSeconds += dt }
             spawner.update(playerX: player.position.x)
+            milestones.update(playerX: player.position.x)
             updateDistance()
             cam.follow(target: player.position, velocity: player.velocity, dt: dt)
             background.update(camera: cam, distanceMetres: distanceMetres, dt: dt)
@@ -179,21 +186,40 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func handle(_ outcome: WaterSkipSystem.Outcome) {
         switch outcome {
-        case .skipped(let impactSpeed, let hard, let damage):
+        case .skipped(let impactSpeed, let hard, let damage, let perfect):
             skipsThisRun += 1
+            skipCombo += 1
+            bestCombo = max(bestCombo, skipCombo)
             splash(at: player.position, intensity: clamp(impactSpeed / 1800, 0.3, 1.2))
             AudioManager.shared.play(.splash, volume: 0.7)
             Haptics.skip()
-            if skipsThisRun % 3 == 0 {
-                FloatingLabel.show("SKIP ×\(skipsThisRun)", at: player.position + CGPoint(x: 0, y: 40), in: world,
-                                   color: UIColor(red: 0.7, green: 0.95, blue: 1, alpha: 1), fontSize: 22)
+
+            // Combo pays a little more each consecutive skip; a shallow "perfect" landing pays extra.
+            var bonus = Tuning.skipComboCoinStep * skipCombo
+            if perfect {
+                perfectSkips += 1
+                bonus += Tuning.perfectSkipCoins
+                AudioManager.shared.play(.perfect, volume: 0.8)
+                Haptics.medium(0.8)
+                FloatingLabel.show("PERFECT!", at: player.position + CGPoint(x: 0, y: 64), in: world,
+                                   color: UIColor(red: 1, green: 0.85, blue: 0.3, alpha: 1), fontSize: 26)
             }
+            runCoins += bonus
+            let comboColor = skipCombo >= 5 ? UIColor(red: 1, green: 0.6, blue: 0.2, alpha: 1)
+                                            : UIColor(red: 0.7, green: 0.95, blue: 1, alpha: 1)
+            FloatingLabel.show("SKIP ×\(skipCombo)  +\(bonus)", at: player.position + CGPoint(x: 0, y: 36), in: world,
+                               color: comboColor, fontSize: skipCombo >= 5 ? 24 : 20)
             if hard {
                 cam.shake(Tuning.hardImpactShake)
                 Haptics.heavy()
                 damagePlayer(damage, shake: 0)
             }
         case .plowed(let impactSpeed, let hard, let damage):
+            if skipCombo >= 3 {
+                FloatingLabel.show("COMBO ×\(skipCombo) ENDED", at: player.position + CGPoint(x: 0, y: 40), in: world,
+                                   color: UIColor.white.withAlphaComponent(0.8), fontSize: 18)
+            }
+            skipCombo = 0
             splash(at: player.position, intensity: clamp(impactSpeed / 1400, 0.5, 1.5))
             AudioManager.shared.play(.splash, volume: 1)
             Haptics.medium()
@@ -238,13 +264,38 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
     }
 
+    // MARK: - Milestones
+
+    private func passedMilestone(metres: CGFloat, isBest: Bool) {
+        guard phase == .flying else { return }
+        if isBest {
+            FloatingLabel.show("NEW BEST!", at: player.position + CGPoint(x: 0, y: 90), in: world,
+                               color: UIColor(red: 1, green: 0.8, blue: 0.2, alpha: 1), fontSize: 34)
+            AudioManager.shared.play(.purchase)
+            Haptics.success()
+            cam.shake(5)
+        } else {
+            FloatingLabel.show("\(Int(metres)) m", at: player.position + CGPoint(x: 0, y: 80), in: world,
+                               color: .white, fontSize: 28)
+            AudioManager.shared.play(.milestone, volume: 0.6)
+            Haptics.medium(0.5)
+        }
+    }
+
     // MARK: - Entity callbacks
 
-    func awardCoins(_ amount: Int, at position: CGPoint) {
+    /// `quiet` is for rapid pickups (coin arcs): a lighter sound and no haptic so eight coins
+    /// in a row don't buzz the phone.
+    func awardCoins(_ amount: Int, at position: CGPoint, quiet: Bool = false) {
         runCoins += amount
-        FloatingLabel.show("+\(amount)", at: position, in: world)
-        AudioManager.shared.play(.coin)
-        Haptics.medium(0.6)
+        if quiet {
+            FloatingLabel.show("+\(amount)", at: position, in: world, fontSize: 16)
+            AudioManager.shared.play(.coin, volume: 0.45)
+        } else {
+            FloatingLabel.show("+\(amount)", at: position, in: world)
+            AudioManager.shared.play(.coin)
+            Haptics.medium(0.6)
+        }
     }
 
     func damagePlayer(_ amount: CGFloat, shake: CGFloat) {
@@ -286,6 +337,24 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             AudioManager.shared.play(.splash, volume: 0.5)
             Haptics.medium()
             FloatingLabel.show("TANGLED", at: position + CGPoint(x: 0, y: 40), in: world, color: UIColor(red: 1, green: 0.6, blue: 0.4, alpha: 1), fontSize: 20)
+        case .dolphin:
+            AudioManager.shared.play(.whale, volume: 0.8)
+            Haptics.medium()
+            splash(at: position, intensity: 1.0)
+            FloatingLabel.show("DOLPHIN RIDE!", at: position + CGPoint(x: 0, y: 70), in: world, color: UIColor(red: 0.6, green: 0.95, blue: 1, alpha: 1))
+        case .balloon:
+            AudioManager.shared.play(.pop)
+            Haptics.medium(0.7)
+            FloatingLabel.show("FLOAT!", at: position + CGPoint(x: 0, y: 44), in: world, color: UIColor(red: 1, green: 0.6, blue: 0.8, alpha: 1), fontSize: 22)
+        case .explosion:
+            AudioManager.shared.play(.explosion)
+            Haptics.heavy()
+            splash(at: position, intensity: 1.8)
+            FloatingLabel.show("KABOOM!", at: position + CGPoint(x: 0, y: 80), in: world, color: UIColor(red: 1, green: 0.45, blue: 0.2, alpha: 1), fontSize: 30)
+        case .sting:
+            AudioManager.shared.play(.hurt, volume: 0.7)
+            Haptics.medium()
+            FloatingLabel.show("STUNG! no rockets", at: position + CGPoint(x: 0, y: 40), in: world, color: UIColor(red: 0.85, green: 0.6, blue: 1, alpha: 1), fontSize: 20)
         }
     }
 
@@ -404,7 +473,10 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             (node as? SKLabelNode)?.text = "\(Int(CGFloat(finalMetres) * eased)) m"
         })
 
-        let coins = SKLabelNode.make("+\(runCoins) coins   ·   \(skipsThisRun) skips", size: 20,
+        var summary = "+\(runCoins) coins   ·   \(skipsThisRun) skips"
+        if bestCombo >= 3 { summary += "   ·   best combo ×\(bestCombo)" }
+        if perfectSkips > 0 { summary += "   ·   \(perfectSkips) perfect" }
+        let coins = SKLabelNode.make(summary, size: bestCombo >= 3 || perfectSkips > 0 ? 17 : 20,
                                      color: UIColor(red: 1, green: 0.9, blue: 0.4, alpha: 1))
         coins.position = CGPoint(x: 0, y: 12)
         panel.addChild(coins)

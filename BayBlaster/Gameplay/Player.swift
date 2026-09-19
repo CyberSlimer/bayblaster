@@ -21,9 +21,17 @@ final class Player: SKNode {
     private(set) var rockets: Int
     var isDiving = false
 
-    /// Counters bumped by zone entities (bird flocks / storm clouds) on contact begin/end.
+    /// Counters bumped by zone entities (bird flocks / storm clouds / whirlpools) on contact begin/end.
     var liftZones = 0
     var downdraftZones = 0
+    var whirlpoolZones = 0
+
+    /// Timed status effects (seconds remaining). Stun: jellyfish sting, no rockets or dive.
+    /// Float: popped balloons, reduced gravity.
+    private(set) var stunRemaining: CGFloat = 0
+    private(set) var floatRemaining: CGFloat = 0
+    var isStunned: Bool { stunRemaining > 0 }
+    var isFloating: Bool { floatRemaining > 0 }
 
     private(set) var currentFlightTime: CGFloat = 0
     private(set) var longestFlightTime: CGFloat = 0
@@ -152,9 +160,23 @@ final class Player: SKNode {
         return hull <= 0
     }
 
-    /// Fire one rocket if airborne and any remain. Returns true on success.
+    func stun(seconds: CGFloat) {
+        stunRemaining = max(stunRemaining, seconds)
+        isDiving = false
+        let wobble = SKAction.sequence([
+            SKAction.rotate(byAngle: 0.18, duration: 0.08), SKAction.rotate(byAngle: -0.36, duration: 0.16),
+            SKAction.rotate(byAngle: 0.18, duration: 0.08)
+        ])
+        fishNode.run(SKAction.repeat(wobble, count: Int(seconds / 0.32)), withKey: "stun")
+    }
+
+    func float(seconds: CGFloat) {
+        floatRemaining = max(floatRemaining, seconds)
+    }
+
+    /// Fire one rocket if airborne, not stunned, and any remain. Returns true on success.
     func fireRocket() -> Bool {
-        guard state == .flying, rockets > 0 else { return false }
+        guard state == .flying, rockets > 0, !isStunned else { return false }
         rockets -= 1
         var v = velocity
         v.dx += config.rocketStrength
@@ -174,11 +196,16 @@ final class Player: SKNode {
     /// Integrates gravity, drag and zone forces into the physics velocity. SpriteKit then moves
     /// the body during its simulation step.
     func update(dt: CGFloat) {
+        stunRemaining = max(0, stunRemaining - dt)
+        floatRemaining = max(0, floatRemaining - dt)
+        if isStunned { isDiving = false }
+
         switch state {
         case .flying:
             var v = velocity
-            let g = Tuning.gravity * (isDiving ? Tuning.diveGravityMultiplier : 1)
-            v.dy += g * dt
+            var gMult: CGFloat = isDiving ? Tuning.diveGravityMultiplier : 1
+            if isFloating { gMult *= Tuning.balloonGravityMultiplier }
+            v.dy += Tuning.gravity * gMult * dt
             if liftZones > 0 {
                 v.dy += Tuning.birdLift * dt
                 v.dx += Tuning.birdPush * dt
@@ -186,7 +213,11 @@ final class Player: SKNode {
             if downdraftZones > 0 {
                 v.dy -= Tuning.stormCloudPush * dt
             }
-            let drag = max(0, 1 - config.airDrag * dt)
+            var drag = max(0, 1 - config.airDrag * dt)
+            if whirlpoolZones > 0 {
+                v.dy -= Tuning.whirlpoolPull * dt
+                drag *= max(0, 1 - Tuning.whirlpoolDrag * dt)
+            }
             v.dx *= drag
             v.dy *= drag
             velocity = v
@@ -199,6 +230,7 @@ final class Player: SKNode {
         case .plowing:
             var v = velocity
             v.dx *= exp(-Tuning.plowDrag * dt)
+            if whirlpoolZones > 0 { v.dx *= exp(-Tuning.whirlpoolDrag * 3 * dt) }
             v.dy = 0
             velocity = v
             position.y = Tuning.waterY + Tuning.plowOffsetY

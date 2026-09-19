@@ -3,9 +3,23 @@
 ## What exists
 
 Complete v1 of the game as specified: title / aim / flight / results / shop, water-skip
-physics, 10 boost & hazard types, procedural spawning, camera, parallax day→night background,
-HUD with safe-area layout, procedural audio, haptics, Codable save with corrupt-file recovery,
-placeholder vector art with a one-drop PNG swap. ~3,300 lines across 19 Swift files.
+physics, procedural spawning, camera, parallax day→night background, HUD with safe-area
+layout, procedural audio, haptics, Codable save with corrupt-file recovery, placeholder
+vector art with a one-drop PNG swap.
+
+Added 2026-09-18 (Mac session), aimed at the genre's retention hooks:
+- **16 entity kinds** (was 10). New hazards: sea mine (big hull hit *but* hurls you back into
+  the air — risk/reward), jellyfish (sting + 1.5 s stun: no rockets, no dive), whirlpool
+  (zone that drags you down / slows a plow). New boosts: dolphin (forward bounce, keeps all
+  speed), balloons (2.2 s low-gravity float). Small `coin` kind used only by coin arcs.
+- **Coin arcs**: 22% of boost spawns become a 6–9 coin parabola — a line to aim for.
+- **Skip combos**: consecutive skips pay `3 × combo` coins; a plow ends the combo. A landing
+  shallower than 22° is a **PERFECT** skip (+15 coins, +4% speed). Results card shows best
+  combo and perfect count.
+- **Milestone flags** every 250 m and a gold **★ YOUR BEST ★** flag at the saved best.
+- **Spawn fairness**: the hazard share is ×0.45 right after a waterline hazard.
+- Debug-only test hook: launch with env `BB_ANGLE=32 BB_POWER=1` to force the aim locks
+  (`SIMCTL_CHILD_` prefix for `simctl launch`). See `Launcher.swift`.
 
 ## What has NOT been done
 
@@ -26,9 +40,13 @@ placeholder vector art with a one-drop PNG swap. ~3,300 lines across 19 Swift fi
 
 | Build | Distance |
 |---|---|
-| Fresh boat | 280–320 m |
-| Run ~10 (L3 H3 R3 A2 U1) | ~1,660 m |
-| Fully upgraded | ~6,500 m |
+| Fresh boat | 280–310 m |
+| Mid-late (L3 H2 R2 A2 U1) | ~1,500 m |
+| Fully upgraded | ~6,800 m |
+
+Re-checked after the 2026-09-18 additions: distances within ±4% of before, coins +3–9% from
+combos. Play-test ideas still open: whether mines feel fair (35 hull), whether the stun reads
+clearly enough, milestone label overlapping the HUD when the boat is near the top of screen.
 
 `python3 Tools/sim.py` reproduces this table and the coin-economy walkthrough.
 

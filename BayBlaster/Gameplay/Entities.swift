@@ -4,9 +4,11 @@ import SpriteKit
 /// note at the top of Constants.swift.
 enum EntityKind: CaseIterable {
     // Boosts
-    case buoy, whaleSpout, motor, birdFlock, coinBag, fuelCan
+    case buoy, whaleSpout, motor, birdFlock, coinBag, fuelCan, dolphin, balloon
+    /// Small coin placed by the spawner in arcs; never picked from the weight table (weight 0).
+    case coin
     // Hazards
-    case rock, net, shark, stormCloud
+    case rock, net, shark, stormCloud, mine, jellyfish, whirlpool
 
     struct Spec {
         let weight: CGFloat                    // relative spawn frequency within its group
@@ -25,15 +27,23 @@ enum EntityKind: CaseIterable {
         case .birdFlock:  return Spec(weight: 15, heightRange: 300...900, radius: 110, isHazard: false, isZone: true,  artKey: "birdFlock")
         case .coinBag:    return Spec(weight: 15, heightRange: 60...500,  radius: 24,  isHazard: false, isZone: false, artKey: "coinBag")
         case .fuelCan:    return Spec(weight: 10, heightRange: 30...300,  radius: 24,  isHazard: false, isZone: false, artKey: "fuelCan")
+        case .dolphin:    return Spec(weight: 14, heightRange: 0...0,     radius: 38,  isHazard: false, isZone: false, artKey: "dolphin")
+        case .balloon:    return Spec(weight: 12, heightRange: 200...650, radius: 34,  isHazard: false, isZone: false, artKey: "balloon")
+        case .coin:       return Spec(weight: 0,  heightRange: 0...0,     radius: 20,  isHazard: false, isZone: false, artKey: "coin")
         case .rock:       return Spec(weight: 35, heightRange: 0...0,     radius: 34,  isHazard: true,  isZone: false, artKey: "rock")
         case .net:        return Spec(weight: 25, heightRange: 0...0,     radius: 40,  isHazard: true,  isZone: false, artKey: "net")
         case .shark:      return Spec(weight: 20, heightRange: 0...0,     radius: 34,  isHazard: true,  isZone: false, artKey: "shark")
         case .stormCloud: return Spec(weight: 20, heightRange: 350...900, radius: 100, isHazard: true,  isZone: true,  artKey: "stormCloud")
+        case .mine:       return Spec(weight: 18, heightRange: 0...0,     radius: 30,  isHazard: true,  isZone: false, artKey: "mine")
+        case .jellyfish:  return Spec(weight: 20, heightRange: 20...180,  radius: 28,  isHazard: true,  isZone: false, artKey: "jellyfish")
+        case .whirlpool:  return Spec(weight: 15, heightRange: 0...0,     radius: 90,  isHazard: true,  isZone: true,  artKey: "whirlpool")
         }
     }
 
-    static let boosts = EntityKind.allCases.filter { !$0.spec.isHazard }
-    static let hazards = EntityKind.allCases.filter { $0.spec.isHazard }
+    static let boosts = EntityKind.allCases.filter { !$0.spec.isHazard && $0.spec.weight > 0 }
+    static let hazards = EntityKind.allCases.filter { $0.spec.isHazard && $0.spec.weight > 0 }
+    /// Waterline hazards are the ones that can form an unfair wall; the spawner spaces these out.
+    var isWaterHazard: Bool { spec.isHazard && spec.heightRange.upperBound == 0 }
 }
 
 /// A spawned world object. Static physics body used purely for contact detection.
@@ -72,6 +82,29 @@ final class WorldEntity: SKNode {
             art.run(.repeatForever(.sequence([
                 .moveBy(x: 0, y: 8, duration: 0.7), .moveBy(x: 0, y: -8, duration: 0.7)
             ])))
+        case .coin:
+            art.run(.repeatForever(.sequence([
+                .scaleX(to: 0.3, duration: 0.35), .scaleX(to: 1, duration: 0.35)
+            ])))
+        case .balloon:
+            art.run(.repeatForever(.sequence([
+                .moveBy(x: 0, y: 14, duration: 1.1), .moveBy(x: 0, y: -14, duration: 1.1)
+            ])))
+        case .dolphin:
+            art.run(.repeatForever(.sequence([
+                .moveBy(x: 0, y: 10, duration: 0.5), .moveBy(x: 0, y: -10, duration: 0.5)
+            ])))
+        case .mine:
+            art.run(.repeatForever(.sequence([
+                .rotate(byAngle: .pi * 2, duration: 6)
+            ])))
+        case .jellyfish:
+            art.run(.repeatForever(.sequence([
+                .group([.scaleX(to: 1.15, duration: 0.6), .scaleY(to: 0.85, duration: 0.6), .moveBy(x: 0, y: -6, duration: 0.6)]),
+                .group([.scaleX(to: 1.0, duration: 0.6), .scaleY(to: 1.0, duration: 0.6), .moveBy(x: 0, y: 6, duration: 0.6)])
+            ])))
+        case .whirlpool:
+            art.run(.repeatForever(.rotate(byAngle: -.pi * 2, duration: 1.6)))
         case .birdFlock:
             art.run(.repeatForever(.sequence([
                 .scaleY(to: 0.85, duration: 0.25), .scaleY(to: 1.0, duration: 0.25)
@@ -139,6 +172,46 @@ final class WorldEntity: SKNode {
             scene.awardCoins(Tuning.fuelCanValue, at: position)
             vanish()
 
+        case .coin:
+            scene.awardCoins(Tuning.coinValue, at: position, quiet: true)
+            vanish()
+
+        case .dolphin:
+            // Dolphin ride: keeps every bit of horizontal speed and adds a shove — the best water pickup.
+            v.dy = max(v.dy, 0) * 0.3 + Tuning.dolphinBounceUp
+            v.dx += Tuning.dolphinPushForward
+            player.resumeFlying()
+            player.position.y = max(player.position.y, Tuning.waterY + 1)
+            player.velocity = v
+            art.run(.sequence([.moveBy(x: 30, y: 60, duration: 0.25), .moveBy(x: 30, y: -60, duration: 0.3), .removeFromParent()]))
+            scene.juice(.dolphin, at: position)
+
+        case .balloon:
+            v.dy += Tuning.balloonLift
+            player.velocity = v
+            player.float(seconds: Tuning.balloonFloatSeconds)
+            scene.juice(.balloon, at: position)
+            vanish()
+
+        case .mine:
+            // Risk/reward: the blast hurts but hurls the boat back into the air.
+            v.dx *= Tuning.mineSpeedMultiplier
+            v.dy = max(v.dy, 0) + Tuning.mineKnockUp
+            player.resumeFlying()
+            player.position.y = max(player.position.y, Tuning.waterY + 1)
+            player.velocity = v
+            scene.damagePlayer(Tuning.mineDamage, shake: 18)
+            scene.juice(.explosion, at: position)
+            vanish()
+
+        case .jellyfish:
+            v.dy *= Tuning.jellyfishVerticalMultiplier
+            player.velocity = v
+            player.stun(seconds: Tuning.jellyfishStunSeconds)
+            scene.damagePlayer(Tuning.jellyfishDamage, shake: 6)
+            art.run(.sequence([.scale(to: 1.3, duration: 0.1), .scale(to: 1, duration: 0.25)]))
+            scene.juice(.sting, at: position)
+
         case .rock:
             v.dx *= Tuning.rockSpeedMultiplier
             player.velocity = v
@@ -162,7 +235,7 @@ final class WorldEntity: SKNode {
             art.run(.sequence([.moveBy(x: 0, y: 26, duration: 0.12), .moveBy(x: 0, y: -26, duration: 0.3)]))
             scene.juice(.hurt, at: position)
 
-        case .birdFlock, .stormCloud:
+        case .birdFlock, .stormCloud, .whirlpool:
             break
         }
     }
@@ -171,6 +244,7 @@ final class WorldEntity: SKNode {
         switch kind {
         case .birdFlock: player.liftZones += 1
         case .stormCloud: player.downdraftZones += 1
+        case .whirlpool: player.whirlpoolZones += 1
         default: break
         }
     }
@@ -179,6 +253,7 @@ final class WorldEntity: SKNode {
         switch kind {
         case .birdFlock: player.liftZones = max(0, player.liftZones - 1)
         case .stormCloud: player.downdraftZones = max(0, player.downdraftZones - 1)
+        case .whirlpool: player.whirlpoolZones = max(0, player.whirlpoolZones - 1)
         default: break
         }
     }

@@ -8,8 +8,9 @@ import Foundation
 struct WaterSkipSystem {
 
     enum Outcome {
-        /// Bounced off the surface. `impactSpeed` is the speed just before the bounce.
-        case skipped(impactSpeed: CGFloat, hardImpact: Bool, damage: CGFloat)
+        /// Bounced off the surface. `impactSpeed` is the speed just before the bounce; `perfect`
+        /// means the landing was shallow enough to earn the bonus.
+        case skipped(impactSpeed: CGFloat, hardImpact: Bool, damage: CGFloat, perfect: Bool)
         /// Landed too steep or too slow: now sliding in the water under heavy drag.
         case plowed(impactSpeed: CGFloat, hardImpact: Bool, damage: CGFloat)
     }
@@ -46,10 +47,11 @@ struct WaterSkipSystem {
 
         if canSkip {
             let restitution = Tuning.skipVerticalRestitution * (player.isDiving ? Tuning.diveSkipRestitutionBonus : 1)
-            player.velocity = CGVector(dx: v.dx * player.config.skipHorizontalRetention,
-                                       dy: -v.dy * restitution)
+            let perfect = impactAngle < Tuning.perfectSkipAngleDegrees * .pi / 180
+            let retention = player.config.skipHorizontalRetention * (perfect ? Tuning.perfectSkipSpeedBonus : 1)
+            player.velocity = CGVector(dx: v.dx * retention, dy: -v.dy * restitution)
             player.endFlightSegment()
-            return .skipped(impactSpeed: impactSpeed, hardImpact: hard, damage: damage)
+            return .skipped(impactSpeed: impactSpeed, hardImpact: hard, damage: damage, perfect: perfect)
         } else {
             player.beginPlowing()
             return .plowed(impactSpeed: impactSpeed, hardImpact: hard, damage: damage)

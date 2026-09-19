@@ -7,7 +7,7 @@ final class AudioManager {
     static let shared = AudioManager()
 
     enum Sound: CaseIterable {
-        case launch, splash, coin, rocket, sink, bump, purchase, tick, whale, hurt, lock
+        case launch, splash, coin, rocket, sink, bump, purchase, tick, whale, hurt, lock, explosion, perfect, milestone, pop
     }
 
     private let engine = AVAudioEngine()
@@ -103,6 +103,19 @@ final class AudioManager {
                       Voice(freqStart: 0, freqEnd: 0, duration: 0.15, decay: 0.05, amp: 0.4, noise: 1)]
         case .lock:
             voices = [Voice(freqStart: 600, freqEnd: 900, duration: 0.08, decay: 0.05, amp: 0.35, square: true)]
+        case .explosion:
+            voices = [Voice(freqStart: 0, freqEnd: 0, duration: 0.7, attack: 0.005, decay: 0.22, amp: 0.8, noise: 1),
+                      Voice(freqStart: 90, freqEnd: 30, duration: 0.6, decay: 0.25, amp: 0.7)]
+        case .perfect:
+            voices = [Voice(freqStart: 784, freqEnd: 784, duration: 0.08, decay: 0.05, amp: 0.3, square: true),
+                      Voice(freqStart: 1175, freqEnd: 1175, duration: 0.08, decay: 0.05, amp: 0.3, square: true, startAt: 0.07),
+                      Voice(freqStart: 1568, freqEnd: 1568, duration: 0.22, decay: 0.12, amp: 0.3, square: true, startAt: 0.14)]
+        case .milestone:
+            voices = [Voice(freqStart: 440, freqEnd: 440, duration: 0.1, decay: 0.07, amp: 0.3),
+                      Voice(freqStart: 880, freqEnd: 880, duration: 0.3, decay: 0.18, amp: 0.3, startAt: 0.1)]
+        case .pop:
+            voices = [Voice(freqStart: 700, freqEnd: 250, duration: 0.09, decay: 0.03, amp: 0.45),
+                      Voice(freqStart: 0, freqEnd: 0, duration: 0.05, decay: 0.02, amp: 0.3, noise: 1)]
         }
 
         let sr = Float(format.sampleRate)

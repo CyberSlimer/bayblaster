@@ -112,6 +112,14 @@ enum Placeholders {
         case "cloud":       return cloud()
         case "coinIcon":    return coinIcon()
         case "rocketIcon":  return rocketIcon()
+        case "coin":        return coin()
+        case "dolphin":     return dolphin()
+        case "balloon":     return balloon()
+        case "mine":        return mine()
+        case "jellyfish":   return jellyfish()
+        case "whirlpool":   return whirlpool()
+        case "flag":        return flag(best: false)
+        case "bestFlag":    return flag(best: true)
         default:            return missing()
         }
     }
@@ -328,6 +336,126 @@ enum Placeholders {
         rect(CGSize(width: 22, height: 26), at: .zero, corner: 4, fill: UIColor(red: 0.85, green: 0.25, blue: 0.2, alpha: 1), in: n)
         rect(CGSize(width: 10, height: 5), at: CGPoint(x: 0, y: 15), corner: 2, fill: UIColor.darkGray, in: n)
         rect(CGSize(width: 12, height: 3), at: CGPoint(x: 0, y: 2), corner: 1, fill: UIColor(red: 1, green: 0.85, blue: 0.3, alpha: 1), stroke: .clear, in: n)
+        return n
+    }
+
+    /// Single small coin, ~20 wide.
+    static func coin() -> SKNode {
+        let n = SKNode()
+        circle(10, fill: UIColor(red: 1, green: 0.8, blue: 0.2, alpha: 1), stroke: UIColor(red: 0.8, green: 0.55, blue: 0.1, alpha: 1), in: n)
+        circle(5, fill: UIColor(red: 1, green: 0.92, blue: 0.5, alpha: 1), stroke: .clear, in: n)
+        return n
+    }
+
+    /// Leaping dolphin at the waterline, ~76×40. Nose points forward (+x).
+    static func dolphin() -> SKNode {
+        let n = SKNode()
+        let grey = UIColor(red: 0.55, green: 0.65, blue: 0.78, alpha: 1)
+        let body = CGMutablePath()
+        body.move(to: CGPoint(x: -36, y: 4))
+        body.addQuadCurve(to: CGPoint(x: 36, y: 6), control: CGPoint(x: 0, y: 34))
+        body.addQuadCurve(to: CGPoint(x: -36, y: 4), control: CGPoint(x: 0, y: -4))
+        body.closeSubpath()
+        shape(body, fill: grey, in: n)
+        shape(polygon([CGPoint(x: -4, y: 18), CGPoint(x: 4, y: 34), CGPoint(x: 10, y: 18)]), fill: grey.darker(0.15), in: n)   // dorsal fin
+        shape(polygon([CGPoint(x: -36, y: 4), CGPoint(x: -46, y: 16), CGPoint(x: -40, y: 0), CGPoint(x: -46, y: -6)]), fill: grey.darker(0.15), in: n) // tail
+        circle(2.5, at: CGPoint(x: 24, y: 10), fill: .black, stroke: .clear, in: n)   // eye
+        for dx in [-24, 30] { circle(5, at: CGPoint(x: CGFloat(dx), y: 0), fill: UIColor.white.withAlphaComponent(0.7), stroke: .clear, in: n) }
+        return n
+    }
+
+    /// Bunch of three balloons with strings, ~56×70.
+    static func balloon() -> SKNode {
+        let n = SKNode()
+        let colors = [UIColor(red: 1, green: 0.35, blue: 0.4, alpha: 1), UIColor(red: 0.4, green: 0.7, blue: 1, alpha: 1), UIColor(red: 1, green: 0.85, blue: 0.3, alpha: 1)]
+        for (i, (dx, dy)) in [(-16, 14), (16, 18), (0, 30)].enumerated() {
+            let string = SKShapeNode(path: polygon([CGPoint(x: CGFloat(dx), y: CGFloat(dy) - 16), CGPoint(x: 0, y: -22)]))
+            string.strokeColor = UIColor.white.withAlphaComponent(0.7)
+            string.lineWidth = 1.5
+            n.addChild(string)
+            let b = SKShapeNode(ellipseOf: CGSize(width: 26, height: 32))
+            b.position = CGPoint(x: CGFloat(dx), y: CGFloat(dy))
+            b.fillColor = colors[i]
+            b.strokeColor = colors[i].darker(0.2)
+            b.lineWidth = 2
+            n.addChild(b)
+            circle(4, at: CGPoint(x: CGFloat(dx) - 6, y: CGFloat(dy) + 8), fill: UIColor.white.withAlphaComponent(0.6), stroke: .clear, in: n)
+        }
+        return n
+    }
+
+    /// Spiky sea mine bobbing at the waterline, ~56 wide.
+    static func mine() -> SKNode {
+        let n = SKNode()
+        let dark = UIColor(red: 0.18, green: 0.18, blue: 0.22, alpha: 1)
+        for i in 0..<8 {
+            let a = CGFloat(i) / 8 * .pi * 2
+            let tip = CGPoint(x: cos(a) * 28, y: sin(a) * 28)
+            let base1 = CGPoint(x: cos(a + 0.25) * 18, y: sin(a + 0.25) * 18)
+            let base2 = CGPoint(x: cos(a - 0.25) * 18, y: sin(a - 0.25) * 18)
+            shape(polygon([base1, tip, base2]), fill: dark, stroke: .clear, in: n)
+        }
+        circle(20, fill: dark, stroke: UIColor(red: 0.35, green: 0.35, blue: 0.4, alpha: 1), in: n)
+        circle(5, at: CGPoint(x: 0, y: 4), fill: UIColor(red: 1, green: 0.2, blue: 0.2, alpha: 1), stroke: .clear, in: n) // blinking light
+        circle(7, at: CGPoint(x: -8, y: 8), fill: UIColor.white.withAlphaComponent(0.18), stroke: .clear, in: n)
+        return n
+    }
+
+    /// Jellyfish drifting just above the water, ~48×56.
+    static func jellyfish() -> SKNode {
+        let n = SKNode()
+        let purple = UIColor(red: 0.8, green: 0.55, blue: 1, alpha: 0.9)
+        let dome = CGMutablePath()
+        dome.move(to: CGPoint(x: -22, y: 0))
+        dome.addQuadCurve(to: CGPoint(x: 22, y: 0), control: CGPoint(x: 0, y: 44))
+        dome.addLine(to: CGPoint(x: 16, y: -4))
+        dome.addLine(to: CGPoint(x: 8, y: 0))
+        dome.addLine(to: CGPoint(x: 0, y: -4))
+        dome.addLine(to: CGPoint(x: -8, y: 0))
+        dome.addLine(to: CGPoint(x: -16, y: -4))
+        dome.closeSubpath()
+        shape(dome, fill: purple, stroke: purple.darker(0.2), in: n)
+        for dx in [-14, -5, 5, 14] {
+            let t = SKShapeNode(path: polygon([CGPoint(x: CGFloat(dx), y: -2), CGPoint(x: CGFloat(dx) + 4, y: -14), CGPoint(x: CGFloat(dx) - 3, y: -28)]))
+            t.strokeColor = purple.darker(0.1)
+            t.lineWidth = 2.5
+            n.addChild(t)
+        }
+        circle(3, at: CGPoint(x: -7, y: 14), fill: .white, stroke: .clear, in: n)
+        circle(3, at: CGPoint(x: 7, y: 14), fill: .white, stroke: .clear, in: n)
+        return n
+    }
+
+    /// Whirlpool on the water, ~180 wide (zone). Drawn flat so it reads as a surface feature.
+    static func whirlpool() -> SKNode {
+        let n = SKNode()
+        for (i, w) in [170, 130, 92, 56, 24].enumerated() {
+            let ring = SKShapeNode(ellipseOf: CGSize(width: CGFloat(w), height: CGFloat(w) * 0.34))
+            ring.position = CGPoint(x: 0, y: -CGFloat(i) * 3)
+            ring.fillColor = .clear
+            ring.strokeColor = UIColor(red: 0.85, green: 0.95, blue: 1, alpha: 0.55 + CGFloat(i) * 0.08)
+            ring.lineWidth = 3
+            ring.zRotation = CGFloat(i) * 0.15
+            n.addChild(ring)
+        }
+        let eye = SKShapeNode(ellipseOf: CGSize(width: 20, height: 8))
+        eye.position = CGPoint(x: 0, y: -12)
+        eye.fillColor = UIColor(red: 0.05, green: 0.2, blue: 0.4, alpha: 0.9)
+        eye.strokeColor = .clear
+        n.addChild(eye)
+        return n
+    }
+
+    /// Distance flag on a pole. Origin at the waterline; the label is added by Milestones.
+    static func flag(best: Bool) -> SKNode {
+        let n = SKNode()
+        rect(CGSize(width: 4, height: 84), at: CGPoint(x: 0, y: 42), corner: 1, fill: UIColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 1), stroke: .clear, in: n)
+        circle(10, at: CGPoint(x: 0, y: 2), fill: UIColor(red: 0.95, green: 0.4, blue: 0.3, alpha: 1), in: n)   // float
+        let color = best ? UIColor(red: 1, green: 0.78, blue: 0.2, alpha: 1) : UIColor(red: 0.95, green: 0.95, blue: 1, alpha: 1)
+        shape(polygon([CGPoint(x: 2, y: 84), CGPoint(x: 48, y: 72), CGPoint(x: 2, y: 58)]), fill: color, stroke: color.darker(0.2), in: n)
+        if best {
+            shape(polygon([CGPoint(x: 2, y: 84), CGPoint(x: 48, y: 72), CGPoint(x: 2, y: 58)]), fill: color, stroke: UIColor(red: 0.7, green: 0.45, blue: 0.05, alpha: 1), lineWidth: 3, in: n)
+        }
         return n
     }
 

@@ -11,6 +11,9 @@ Lighthouse Cannon. See README.md for the file map and HANDOFF.md for current sta
   `SKNode` already declares a mutable `speed`). Builds with zero warnings. Smoke-tested on the
   iPhone 16 Pro Max Simulator: title → aim → flight → splashdown → shop purchase → save
   persists across relaunch. Remaining work is play-testing/tuning (see HANDOFF.md).
+- 2026-09-18 additions: 6 new entity kinds, coin arcs, skip combos + PERFECT skips, milestone
+  flags, hazard spacing. Debug builds accept `BB_ANGLE` / `BB_POWER` env vars to force the aim
+  locks for reproducible test runs.
 - Pacing constants were tuned with `Tools/sim.py` (a Python mirror of the physics). If you change
   anything in `Tuning` that affects distance, mirror it in `sim.py` and re-run
   `python3 Tools/sim.py` so the pacing table stays honest.
