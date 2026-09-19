@@ -6,5 +6,8 @@
 	     Orientation (landscape only) is set in the target's build settings (INFOPLIST_KEY_UISupportedInterfaceOrientations*). -->
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<!-- No encryption beyond what iOS provides → TestFlight/App Store skip the export-compliance question. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>
