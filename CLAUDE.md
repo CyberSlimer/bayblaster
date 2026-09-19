@@ -15,7 +15,7 @@ fired out over the bay. See README.md for the file map and HANDOFF.md for curren
   flags, hazard spacing, and rotating missions (`Core/Missions.swift`; `RunStats` is gathered
   in GameScene — add a field there when a new mission kind needs new data). Debug builds accept `BB_ANGLE` / `BB_POWER` env vars to force the aim
   locks for reproducible test runs.
-- 2026-09-19 "locker" update (NOT YET COMPILED — written on Linux, see HANDOFF.md):
+- 2026-09-19 "locker" update (compiled and smoke-tested on the Mac the same day, see HANDOFF.md):
   8 unlockable riders each with a passive perk and an in-flight ability, 9 bolt-on gear parts
   in 3 slots, 4 launchers with 3 different aim rituals, 25 achievements, a seeded daily
   challenge, and prestige. New `LockerScene`. `save.version` is now 2; v1 saves load fine.

@@ -426,6 +426,7 @@ private final class LockerCard: SKNode {
 
         let titleSize: CGFloat = compact ? 13 : min(16, max(11, size.width * 0.105))
         let titleLabel = SKLabelNode.make(spec.title, size: titleSize, font: Tuning.fontHeavy)
+        titleLabel.shrinkToFit(width: size.width - 14)
         cursor -= titleSize / 2
         titleLabel.position = CGPoint(x: 0, y: cursor)
         addChild(titleLabel)

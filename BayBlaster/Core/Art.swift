@@ -767,7 +767,7 @@ enum Placeholders {
              fill: UIColor(red: 0.92, green: 0.94, blue: 0.96, alpha: 1), stroke: .clear, in: n) // pale belly
         // grin
         for i in 0..<5 {
-            shape(polygon([CGPoint(x: CGFloat(4 + i * 3), y: -2), CGPoint(x: CGFloat(5.5 + i * 3), y: -5.5), CGPoint(x: CGFloat(7 + i * 3), y: -2)]),
+            shape(polygon([CGPoint(x: CGFloat(4 + i * 3), y: -2), CGPoint(x: CGFloat(i * 3) + 5.5, y: -5.5), CGPoint(x: CGFloat(7 + i * 3), y: -2)]),
                   fill: .white, stroke: .clear, in: n)
         }
         circle(2.6, at: CGPoint(x: 9, y: 3), fill: .white, stroke: .clear, in: n)

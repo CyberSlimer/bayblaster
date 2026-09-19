@@ -46,6 +46,7 @@ final class ButtonNode: SKNode {
         label.fontColor = .white
         label.verticalAlignmentMode = .center
         label.horizontalAlignmentMode = .center
+        label.shrinkToFit(width: size.width - 20)
         addChild(label)
 
         subLabel.fontSize = fontSize * 0.55
@@ -122,6 +123,12 @@ extension SKLabelNode {
         l.horizontalAlignmentMode = align
         l.verticalAlignmentMode = .center
         return l
+    }
+
+    /// Steps the font size down until the text fits `width` (never below `minimum`), so a long
+    /// label like "LAUNCH AGAIN" or "Old Lighthouse Cannon" stays inside its button or card.
+    func shrinkToFit(width: CGFloat, minimum: CGFloat = 9) {
+        while frame.width > width && fontSize - 0.5 >= minimum { fontSize -= 0.5 }
     }
 }
 

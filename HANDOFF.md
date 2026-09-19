@@ -11,13 +11,11 @@ Added 2026-09-18 (Mac session): 16 entity kinds, coin arcs, skip combos + PERFEC
 milestone flags, progressive unlocks with first-touch tips, and 12 rotating missions. All
 compiled and smoke-tested.
 
-## Added 2026-09-19 — the "locker" update (⚠️ NOT YET COMPILED)
+## Added 2026-09-19 — the "locker" update
 
-Written on Linux with no Swift toolchain, exactly like the original Windows session. **The
-first job on the Mac is to build it and fix whatever the compiler finds.** Everything below is
-cross-checked by script (every `Tuning.` member resolves, every art key has a drawing, every
-`switch` over the new enums is exhaustive, every price/reward table covers every case, braces
-balance) but that is not a compiler.
+Written on Linux with no Swift toolchain, then compiled and smoke-tested on the Mac the same
+evening (Xcode 26.6). The only compile error in ~4,000 lines was one `Int`/`Double` mix in a
+`Placeholders` drawing; zero warnings. See "Smoke test" below for what was verified.
 
 The one thing it answers to the original brief: there was nothing to *collect*, and in the air
 you only had two verbs. Now there are four unlock tracks and a third verb.
@@ -82,25 +80,46 @@ than the only one, so nothing that already worked was thrown away.
 cannon selected. **Worth explicitly testing on the Mac**: install the old build, make a save,
 then install this one over it.
 
+## Smoke test (Mac, 2026-09-19, iPhone 16 Pro Max + iPhone 16 Pro simulators)
+
+All of the handoff checklist passed:
+
+- **v1 save → v2 build**: installed `main`, played a run (178 m / 178 coins), installed this
+  branch over it. Title showed the old best/coins/missions with Marlow + cannon selected;
+  the file was rewritten as `version: 2` with every new key present.
+- **Locker**: all four tabs draw on both phone sizes (two-row grids, ellipsised text). Bought
+  Bristle and the Surf Rod & Reel; both survived a kill + relaunch and the title footer and
+  launcher art followed.
+- **Ability button**: PUFF fired mid-run — `stats.abilitiesUsed` and `seenAbilities` updated,
+  and the coin maths on the results card reconciled to the coin (run + trophies + mission).
+- **Launcher rituals**: rod cast band, slingshot hold-to-draw with the red overcharge zone,
+  and the torpedo's low two-tap sweep all work. A forced-lock torpedo run went 1,209 m with a
+  ×6 combo and 2 PERFECTs — the skip-chain identity the sim predicted reads on screen.
+- **Trophies / missions**: `firstSplash`, `fly500`, `unscathed`, `fullArsenal`, `kilometre`
+  paid out on the results card alongside a completed mission.
+
+Fixed while testing: `SKLabelNode.shrinkToFit(width:)` (in `UIKitNodes.swift`) — `ButtonNode`
+and locker card titles now step the font down until the text fits, which stops "LAUNCH AGAIN"
+and "Old Lighthouse Cannon" spilling out of their boxes.
+
+Testing gotcha: if another session (e.g. Krunkball) is iterating on the same simulator, its
+installs keep stealing the foreground and taps land on the home screen. Boot a second device
+(`xcrun simctl boot`) and pass `device:` on every simulator-tool call.
+
 ## What has NOT been done
 
-1. **Compile.** Not attempted — no Swift toolchain on Linux. Expect a handful of errors.
-   Highest-risk spots, in order: `GameScene` has two designated initialisers now
-   (`init(size:)` and `init(size:daily:)`); `LockerScene.CardSpec` is `fileprivate` so the
-   `LockerCard` further down the file can see it; `RandomSource` copies its generator out and
-   back on every draw; the `Placeholders` drawings use a lot of `CGFloat(...)` conversions.
-2. **Play-test the new layers.** The sim says the numbers are sane but it cannot say whether
-   the ability button is reachable with a thumb, whether the cast band is readable at speed,
-   or whether the slingshot's snap feels fair. Specifically:
+1. **Play-test the new layers by hand.** The sim says the numbers are sane and the smoke test
+   says everything fires, but nobody has yet judged feel:
    - Ability button placement/size (`HUD.abilityButtonCentre`, `HUD.abilityButtonRadius`).
    - The rod's green band and the slingshot's red danger zone (`HUD.setLauncherStyle`).
    - Whether the torpedo's low launch reads as exciting or as "I hit the water instantly".
-   - Whether 9 gear cards on a 3×3 grid are legible on a small iPhone in landscape.
-3. **Original v1 play-test items still open**: camera `cameraVisibleHeight`, aim sweep periods,
+   - Cosmetic: the results card sits over the PUFF button and the milestone flag, and on the
+     title screen the DAILY button covers part of the launcher art.
+2. **Original v1 play-test items still open**: camera `cameraVisibleHeight`, aim sweep periods,
    `skipMaxAngleDegrees`, entity contact radii vs the baked textures, audio levels.
-4. **TestFlight**: pipeline is done; still blocked only on creating the App Store Connect app
+3. **TestFlight**: pipeline is done; still blocked only on creating the App Store Connect app
    record for `com.cyberslimer.bayblaster` (`docs/DEVICE_AND_TESTFLIGHT.md`).
-5. **120 Hz check** on a ProMotion device.
+4. **120 Hz check** on a ProMotion device.
 
 ## Balance work done with the simulator
 
@@ -166,10 +185,8 @@ costs 3–10 runs of saving at the tier you first want it, ~300,000 coins for al
 before missions, trophies and the daily, which the simulation does not count. Prestige's
 +25%/level coin multiplier is what makes a second pass quick.
 
-## Suggested first prompt for Claude Code on the Mac
+## Suggested next prompt
 
-> Build BayBlaster for the iOS Simulator with xcodebuild and fix the compile errors — the
-> locker update was written without a Swift toolchain. Then run it and check: a run launches
-> and the ability button fires; the Locker's four tabs draw and a purchase sticks across a
-> relaunch; each of the four launchers' aim rituals works; and a save from the previous build
-> still loads.
+> Install BayBlaster on my iPhone with `Tools/ship.sh device` so I can feel out the ability
+> button, the cast band and the slingshot draw; then walk me through creating the App Store
+> Connect record so `Tools/ship.sh testflight` goes through.
