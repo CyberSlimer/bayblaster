@@ -37,7 +37,9 @@ final class ShopScene: SKScene {
     private let coinsLabel = SKLabelNode.make("", size: 22, font: Tuning.fontHeavy, color: UIColor(red: 1, green: 0.9, blue: 0.4, alpha: 1), align: .right)
     private var coinIcon: SKNode!
     private var backButton: ButtonNode!
+    private var lockerButton: ButtonNode!
     private var resetButton: ButtonNode!
+    private var prestigeButton: ButtonNode!
     private var confirmOverlay: SKNode?
     private var didBuild = false
     private var showBlurb = true       // wide screens get the flavour text too
@@ -74,6 +76,14 @@ final class ShopScene: SKScene {
         }
         addChild(backButton)
 
+        lockerButton = ButtonNode(text: "LOCKER ▶", size: CGSize(width: 130, height: 44),
+                                  color: UIColor(red: 0.55, green: 0.35, blue: 0.75, alpha: 1), fontSize: 16)
+        lockerButton.action = { [weak self] in
+            guard let self = self else { return }
+            SceneRouter.present(LockerScene(size: self.size), from: self, reveal: true)
+        }
+        addChild(lockerButton)
+
         for kind in UpgradeKind.allCases {
             let row = Row(kind: kind)
             row.buy.action = { [weak self, weak row] in
@@ -87,6 +97,12 @@ final class ShopScene: SKScene {
         resetButton = ButtonNode(text: "Reset save", size: CGSize(width: 130, height: 34), color: UIColor(red: 0.5, green: 0.2, blue: 0.2, alpha: 1), fontSize: 13)
         resetButton.action = { [weak self] in self?.showResetConfirmation() }
         addChild(resetButton)
+
+        // Unlocked only once all five tracks are maxed; see SaveData.canPrestige.
+        prestigeButton = ButtonNode(text: "CAST OFF", size: CGSize(width: 170, height: 34),
+                                    color: UIColor(red: 0.7, green: 0.35, blue: 0.6, alpha: 1), fontSize: 14)
+        prestigeButton.action = { [weak self] in self?.showPrestigeConfirmation() }
+        addChild(prestigeButton)
     }
 
     override func didChangeSize(_ oldSize: CGSize) {
@@ -108,6 +124,7 @@ final class ShopScene: SKScene {
         coinsLabel.position = CGPoint(x: right - 30, y: top - 20)
         coinIcon.position = CGPoint(x: right - 12, y: top - 20)
         backButton.position = CGPoint(x: left + 60 + title.frame.width + 30, y: top - 20)
+        lockerButton.position = CGPoint(x: backButton.position.x + 132, y: top - 20)
 
         let headerBottom = top - 46
         let footerTop = bottom + 40
@@ -134,7 +151,8 @@ final class ShopScene: SKScene {
             row.buy.position = CGPoint(x: right - 80, y: 0)
         }
 
-        resetButton.position = CGPoint(x: 0, y: bottom + 18)
+        resetButton.position = CGPoint(x: -110, y: bottom + 18)
+        prestigeButton.position = CGPoint(x: 100, y: bottom + 18)
         confirmOverlay?.position = .zero
         showBlurb = contentW > 900
         refresh()
@@ -143,6 +161,10 @@ final class ShopScene: SKScene {
     private func refresh() {
         let save = SaveManager.shared.data
         coinsLabel.text = "\(save.coins)"
+        let canCastOff = save.canPrestige
+        prestigeButton.isEnabled = canCastOff
+        prestigeButton.text = canCastOff ? "CAST OFF ★" : "CAST OFF (max all first)"
+        prestigeButton.subtitle = save.prestigeLevel > 0 ? "cast off ×\(save.prestigeLevel)" : nil
         for row in rows {
             let tier = save.tier(of: row.kind)
             for (j, p) in row.pips.enumerated() {
@@ -198,7 +220,7 @@ final class ShopScene: SKScene {
         let t = SKLabelNode.make("Reset all progress?", size: 24, font: Tuning.fontHeavy)
         t.position = CGPoint(x: 0, y: 52)
         panel.addChild(t)
-        let sub = SKLabelNode.make("Coins, upgrades, best distance and stats will be erased.", size: 14, font: Tuning.fontMedium, color: UIColor.white.withAlphaComponent(0.8))
+        let sub = SKLabelNode.make("Coins, upgrades, crew, gear, launchers, trophies and stats will be erased.", size: 14, font: Tuning.fontMedium, color: UIColor.white.withAlphaComponent(0.8))
         sub.position = CGPoint(x: 0, y: 20)
         panel.addChild(sub)
         let yes = ButtonNode(text: "RESET", size: CGSize(width: 150, height: 48), color: UIColor(red: 0.85, green: 0.25, blue: 0.2, alpha: 1), fontSize: 18)
@@ -213,6 +235,56 @@ final class ShopScene: SKScene {
         panel.addChild(yes)
         let no = ButtonNode(text: "KEEP", size: CGSize(width: 150, height: 48), color: UIColor(red: 0.25, green: 0.6, blue: 0.95, alpha: 1), fontSize: 18)
         no.position = CGPoint(x: 90, y: -45)
+        no.action = { [weak self] in self?.dismissConfirmation() }
+        panel.addChild(no)
+        addChild(overlay)
+        overlay.alpha = 0
+        overlay.run(.fadeIn(withDuration: 0.15))
+        confirmOverlay = overlay
+    }
+
+    /// Casting off is the one destructive-looking action that is actually progress, so the
+    /// dialog spells out exactly what survives it.
+    private func showPrestigeConfirmation() {
+        guard confirmOverlay == nil, SaveManager.shared.data.canPrestige else { return }
+        let nextLevel = SaveManager.shared.data.prestigeLevel + 1
+        let multiplier = 1 + Double(nextLevel) * Double(Tuning.prestigeCoinBonusPerLevel)
+        let overlay = SKNode()
+        overlay.zPosition = 500
+        let dim = SKSpriteNode(color: UIColor.black.withAlphaComponent(0.6), size: CGSize(width: size.width + 10, height: size.height + 10))
+        dim.isUserInteractionEnabled = true
+        overlay.addChild(dim)
+        let panel = PanelNode(size: CGSize(width: 460, height: 230))
+        overlay.addChild(panel)
+        let t = SKLabelNode.make("Cast off?", size: 24, font: Tuning.fontHeavy,
+                                 color: UIColor(red: 1, green: 0.75, blue: 0.95, alpha: 1))
+        t.position = CGPoint(x: 0, y: 74)
+        panel.addChild(t)
+        let lines = [
+            "Your coins and all five upgrade tracks go back to zero.",
+            "Your crew, gear, launchers, trophies and best distance stay.",
+            "From then on every coin you earn is worth ×\(String(format: "%.2g", multiplier))."
+        ]
+        for (i, line) in lines.enumerated() {
+            let l = SKLabelNode.make(line, size: 14, font: Tuning.fontMedium,
+                                     color: UIColor.white.withAlphaComponent(i == 2 ? 1 : 0.8))
+            l.position = CGPoint(x: 0, y: 38 - CGFloat(i) * 21)
+            panel.addChild(l)
+        }
+        let yes = ButtonNode(text: "CAST OFF", size: CGSize(width: 170, height: 48),
+                             color: UIColor(red: 0.7, green: 0.35, blue: 0.6, alpha: 1), fontSize: 18)
+        yes.position = CGPoint(x: -95, y: -62)
+        yes.action = { [weak self] in
+            SaveManager.shared.prestige()
+            AudioManager.shared.play(.purchase)
+            Haptics.success()
+            self?.dismissConfirmation()
+            self?.refresh()
+        }
+        panel.addChild(yes)
+        let no = ButtonNode(text: "NOT YET", size: CGSize(width: 170, height: 48),
+                            color: UIColor(red: 0.25, green: 0.6, blue: 0.95, alpha: 1), fontSize: 18)
+        no.position = CGPoint(x: 95, y: -62)
         no.action = { [weak self] in self?.dismissConfirmation() }
         panel.addChild(no)
         addChild(overlay)

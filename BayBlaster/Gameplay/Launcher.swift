@@ -1,15 +1,35 @@
 import SpriteKit
 
-/// The Old Lighthouse Cannon. Sweeps an angle, then a power value; two taps lock them.
-/// Purely visual + timing — GameScene reads `angleDegrees`/`power` and launches the boat.
+/// Whatever is firing you out over the bay. Sweeps an angle, then plays the selected
+/// launcher's power ritual; GameScene reads `angleDegrees` / `power` / `speedMultiplier`
+/// and launches the boat.
+///
+/// Three rituals, chosen by `LauncherKind.spec.aimMode` (see Core/Launchers.swift):
+///
+///   .twoSweep    angle sweeps, tap; power sweeps, tap.  (cannon, torpedo)
+///   .castTiming  angle sweeps, tap; a fast cast bar runs past a green band — tap inside it
+///                for `sweetSpotBonus` speed.            (rod & reel)
+///   .charge      angle sweeps, tap; then HOLD to draw the band back and release to fire.
+///                Hold past full draw for longer than `overchargeGrace` and it snaps.
+///                                                       (slingshot)
 final class Launcher: SKNode {
 
     enum AimState { case sweepingAngle, sweepingPower, fired }
     private(set) var aimState: AimState = .sweepingAngle
 
-    private(set) var angleDegrees: CGFloat = 45
+    let kind: LauncherKind
+    private let spec: LauncherKind.Spec
+
+    private(set) var angleDegrees: CGFloat
     private(set) var power: CGFloat = 0.5
+    /// True once a .charge launcher has been held past full draw and let go.
+    private(set) var didSnap = false
+    /// True when a .castTiming lock landed inside the green band.
+    private(set) var didHitSweetSpot = false
+
     private var clock: CGFloat = 0
+    private var chargeHeld = false
+    private var overchargeClock: CGFloat = 0
 
     private let tower: SKNode
     private let barrel: SKNode
@@ -17,18 +37,34 @@ final class Launcher: SKNode {
     private var trajectoryDots: [SKShapeNode] = []
     private let muzzleFlash: SKEmitterNode
 
+    /// Everything that scales the launch speed on top of the Launcher Power upgrade: the
+    /// launcher's own character, plus a clean cast if this one rewards timing.
+    var speedMultiplier: CGFloat {
+        spec.speedMultiplier * (didHitSweetSpot ? spec.sweetSpotBonus : 1)
+    }
+
+    var minPowerFraction: CGFloat { spec.minPowerFraction }
+    var aimMode: AimMode { spec.aimMode }
+    var sweetSpot: CGFloat { spec.sweetSpot }
+    var sweetSpotHalfWidth: CGFloat { spec.sweetSpotHalfWidth }
+    var muzzleHeight: CGFloat { spec.muzzleHeight }
+
     /// World-space point at the end of the barrel.
     var muzzlePoint: CGPoint {
         let a = angleDegrees * .pi / 180
-        return CGPoint(x: barrel.position.x + cos(a) * Tuning.launcherBarrelLength,
-                       y: barrel.position.y + sin(a) * Tuning.launcherBarrelLength)
+        return CGPoint(x: barrel.position.x + cos(a) * spec.barrelLength,
+                       y: barrel.position.y + sin(a) * spec.barrelLength)
     }
 
     var barrelAngle: CGFloat { angleDegrees * .pi / 180 }
 
-    override init() {
-        tower = Art.sprite("lighthouse")
-        barrel = Art.sprite("cannon")
+    init(kind: LauncherKind = SaveManager.shared.data.selectedLauncherKind) {
+        self.kind = kind
+        let spec = kind.spec
+        self.spec = spec
+        angleDegrees = (spec.angleRange.lowerBound + spec.angleRange.upperBound) / 2
+        tower = Art.sprite(spec.towerArtKey)
+        barrel = Art.sprite(spec.barrelArtKey)
         muzzleFlash = Launcher.makeMuzzleFlash()
         super.init()
 
@@ -36,7 +72,7 @@ final class Launcher: SKNode {
         tower.zPosition = 5
         addChild(tower)
 
-        barrel.position = CGPoint(x: Tuning.launcherPivotX, y: Tuning.waterY + Tuning.launchHeight)
+        barrel.position = CGPoint(x: Tuning.launcherPivotX, y: Tuning.waterY + spec.muzzleHeight)
         barrel.zPosition = 60          // in front of the boat so it looks loaded in the muzzle
         addChild(barrel)
 
@@ -65,16 +101,37 @@ final class Launcher: SKNode {
         trajectory.isHidden = aimState == .fired
         switch aimState {
         case .sweepingAngle:
-            // Triangle wave between min and max angle.
-            let phase = (clock / Tuning.angleSweepPeriod).truncatingRemainder(dividingBy: 1)
+            // Triangle wave between this launcher's min and max angle.
+            let phase = (clock / spec.angleSweepPeriod).truncatingRemainder(dividingBy: 1)
             let tri = phase < 0.5 ? phase * 2 : 2 - phase * 2
-            angleDegrees = lerp(Tuning.launchAngleMinDegrees, Tuning.launchAngleMaxDegrees, tri)
+            angleDegrees = lerp(spec.angleRange.lowerBound, spec.angleRange.upperBound, tri)
             updateBarrel()
-            updateTrajectory(speed: launchSpeed * 0.8)
+            updateTrajectory(speed: launchSpeed * spec.speedMultiplier * 0.8)
+
         case .sweepingPower:
-            let phase = (clock / Tuning.powerSweepPeriod).truncatingRemainder(dividingBy: 1)
-            power = phase < 0.5 ? phase * 2 : 2 - phase * 2
-            updateTrajectory(speed: launchSpeed * lerp(Tuning.minPowerFraction, 1, power))
+            switch spec.aimMode {
+            case .twoSweep, .castTiming:
+                let phase = (clock / spec.powerPeriod).truncatingRemainder(dividingBy: 1)
+                power = phase < 0.5 ? phase * 2 : 2 - phase * 2
+            case .charge:
+                if chargeHeld {
+                    if power >= 1 {
+                        // Full draw. There is a moment of grace, then the band lets go.
+                        power = 1
+                        overchargeClock += dt
+                        if overchargeClock >= spec.overchargeGrace {
+                            didSnap = true
+                            power = spec.snapPower
+                            lockPower()
+                            return
+                        }
+                    } else {
+                        power = min(1, power + dt / max(spec.powerPeriod, 0.05))
+                    }
+                }
+            }
+            updateTrajectory(speed: launchSpeed * speedMultiplier * lerp(spec.minPowerFraction, 1, power))
+
         case .fired:
             break
         }
@@ -84,17 +141,43 @@ final class Launcher: SKNode {
         guard aimState == .sweepingAngle else { return }
         aimState = .sweepingPower
         clock = 0
+        overchargeClock = 0
+        power = spec.aimMode == .charge ? 0 : power
         #if DEBUG
         if let forced = Launcher.debugForcedAngle { angleDegrees = forced; updateBarrel() }
         #endif
         barrel.run(.sequence([.scale(to: 1.08, duration: 0.06), .scale(to: 1, duration: 0.1)]))
     }
 
+    /// `.charge` only: the player has put a finger down and is drawing the band back.
+    func beginCharge() {
+        guard aimState == .sweepingPower, spec.aimMode == .charge else { return }
+        chargeHeld = true
+    }
+
+    /// `.charge` only: finger lifted. Returns true if the release actually fires the shot
+    /// (it will not if the band already snapped on its own).
+    @discardableResult
+    func releaseCharge() -> Bool {
+        guard aimState == .sweepingPower, spec.aimMode == .charge, chargeHeld else { return false }
+        chargeHeld = false
+        lockPower()
+        return true
+    }
+
     func lockPower() {
         guard aimState == .sweepingPower else { return }
         aimState = .fired
+        if spec.aimMode == .castTiming {
+            didHitSweetSpot = abs(power - spec.sweetSpot) <= spec.sweetSpotHalfWidth
+        }
         #if DEBUG
-        if let forced = Launcher.debugForcedPower { power = forced }
+        if let forced = Launcher.debugForcedPower {
+            power = forced
+            if spec.aimMode == .castTiming {
+                didHitSweetSpot = abs(power - spec.sweetSpot) <= spec.sweetSpotHalfWidth
+            }
+        }
         #endif
     }
 

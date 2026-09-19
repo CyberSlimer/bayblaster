@@ -10,6 +10,7 @@ import Foundation
 /// What a mission counts. Every kind is measured over a single run.
 enum MissionKind: String, Codable, CaseIterable {
     case distance, skips, combo, perfect, coins, dolphins, buoys, whales, balloons, mines, rockets, untouched
+    case abilities, cleanHull
 
     /// Target per difficulty level 0…5.
     var targets: [Int] {
@@ -26,13 +27,15 @@ enum MissionKind: String, Codable, CaseIterable {
         case .mines:     return [1, 1, 1, 2, 2, 3]
         case .rockets:   return [1, 2, 3, 3, 3, 3]
         case .untouched: return [1, 1, 1, 1, 1, 1]
+        case .abilities: return [2, 3, 4, 6, 8, 10]
+        case .cleanHull: return [200, 400, 700, 1100, 1700, 2600]   // metres, finishing at full hull
         }
     }
 
     /// Lowest level at which this kind is offered (perfects and "untouched" need some skill).
     var minLevel: Int {
         switch self {
-        case .perfect, .untouched, .mines: return 1
+        case .perfect, .untouched, .mines, .cleanHull: return 1
         default: return 0
         }
     }
@@ -52,6 +55,8 @@ enum MissionKind: String, Codable, CaseIterable {
         case .mines:     return "Survive \(target) mine \(s(target, "blast", "blasts"))"
         case .rockets:   return "Fire \(target) \(s(target, "rocket", "rockets")) in one run"
         case .untouched: return "Finish a run without hitting a hazard"
+        case .abilities: return "Use your ability \(target) times in one run"
+        case .cleanHull: return "Fly \(target) m and finish at full hull"
         }
     }
 
@@ -70,6 +75,8 @@ enum MissionKind: String, Codable, CaseIterable {
         case .mines:     return run.hits["mine"] ?? 0
         case .rockets:   return run.rocketsFired
         case .untouched: return run.hazardsHit == 0 && run.distance > 0 ? 1 : 0
+        case .abilities: return run.abilitiesUsed
+        case .cleanHull: return run.endHullFraction >= 1 ? Int(run.distance) : 0
         }
     }
 }
@@ -109,6 +116,9 @@ struct RunStats {
     var rocketsFired = 0
     var hazardsHit = 0
     var hits: [String: Int] = [:]     // EntityKind artKey → times touched
+    var abilitiesUsed = 0             // times the rider's ability was fired
+    var endHullFraction: Double = 1   // 1 = finished without a scratch
+    var isDaily = false               // this run was a daily challenge
 }
 
 /// Outcome of checking one mission against a run.

@@ -9,8 +9,13 @@ enum PhysicsCategory {
     static let zone: UInt32 = 1 << 3
 }
 
-/// Marlow + the dinghy. Owns the physics body, hull integrity, rockets, and the per-frame
-/// integration of gravity/drag/zone forces (the physics world's own gravity is zero).
+/// The rider + the dinghy. Owns the physics body, hull integrity, rockets, the ability
+/// cooldown, and the per-frame integration of gravity/drag/zone forces (the physics
+/// world's own gravity is zero).
+///
+/// Which rider is drawn, which ability the ability button fires and which parts are bolted
+/// to the hull all come from `config` (Core/Loadout.swift), which is resolved once before
+/// the run starts and never changes during it.
 final class Player: SKNode {
 
     enum State { case idle, flying, plowing, sunk }
@@ -33,6 +38,30 @@ final class Player: SKNode {
     var isStunned: Bool { stunRemaining > 0 }
     var isFloating: Bool { floatRemaining > 0 }
 
+    // MARK: Ability state
+    /// The rider's ability, its cooldown, and whichever timed effect is currently running.
+    private(set) var activeAbility: Ability?
+    private(set) var abilityActiveRemaining: CGFloat = 0
+    private(set) var abilityCooldownRemaining: CGFloat = 0
+    /// Hazards that will be soaked up before they land (Tock's shell).
+    private(set) var shieldCharges = 0
+    /// Armed by Bruno's belly slam; the landing it causes is a guaranteed, very bouncy skip.
+    private(set) var slamArmed = false
+    private(set) var abilityUses = 0
+
+    var ability: Ability { config.ability }
+    var isAbilityReady: Bool { abilityCooldownRemaining <= 0 && state == .flying && !isStunned }
+    /// 0 = just fired, 1 = ready. Drives the HUD button's fill.
+    var abilityChargeFraction: CGFloat {
+        guard config.abilityCooldown > 0 else { return 1 }
+        return clamp(1 - abilityCooldownRemaining / config.abilityCooldown, 0, 1)
+    }
+    var hasShield: Bool { shieldCharges > 0 }
+    /// Chum's frenzy: hazards stop bleeding your speed (they still hurt the hull).
+    var ignoresHazardSlowdown: Bool { activeAbility == .frenzy }
+    /// Bristle's puff and Bruno's slam both force the next landing to skip.
+    var forcesSkip: Bool { activeAbility == .puff || slamArmed }
+
     private(set) var currentFlightTime: CGFloat = 0
     private(set) var longestFlightTime: CGFloat = 0
 
@@ -40,9 +69,11 @@ final class Player: SKNode {
 
     let visual = SKNode()            // rotated to face the velocity
     private let boatNode: SKNode
-    private let fishNode: SKNode
+    private let riderNode: SKNode
+    private let gearNodes = SKNode()
     let rocketTrail: SKEmitterNode
     private let wake: SKEmitterNode
+    private let abilityAura: SKShapeNode
     private var fishBob: CGFloat = 0
 
     init(config: UpgradeConfig) {
@@ -50,15 +81,25 @@ final class Player: SKNode {
         hull = config.maxHull
         rockets = config.rocketCount
         boatNode = Art.sprite("boat")
-        fishNode = Art.sprite("fish")
+        riderNode = Art.sprite(config.crew.artKey)
         rocketTrail = Player.makeRocketTrail()
         wake = Player.makeWake()
+        abilityAura = SKShapeNode(circleOfRadius: Player.bodyRadius + 16)
         super.init()
 
-        fishNode.position = CGPoint(x: -4, y: 18)
+        riderNode.position = CGPoint(x: -4, y: 18)
+        visual.addChild(gearNodes)                 // parts sit under the hull…
         visual.addChild(boatNode)
-        visual.addChild(fishNode)
+        visual.addChild(riderNode)
         addChild(visual)
+        addGearArt()
+
+        abilityAura.fillColor = .clear
+        abilityAura.strokeColor = UIColor(red: 0.7, green: 0.95, blue: 1, alpha: 0.9)
+        abilityAura.lineWidth = 3
+        abilityAura.alpha = 0
+        abilityAura.zPosition = -2
+        visual.addChild(abilityAura)
 
         rocketTrail.position = CGPoint(x: -34, y: -2)
         rocketTrail.zPosition = -1
@@ -85,6 +126,20 @@ final class Player: SKNode {
     }
 
     required init?(coder aDecoder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    /// Bolt the equipped parts onto the hull. Hull parts go underneath, rigs above, trinkets
+    /// on the gunwale — so a kitted-out boat reads as kitted-out at a glance.
+    private func addGearArt() {
+        for item in config.equippedGear {
+            let node = Art.sprite(item.artKey)
+            switch item.slot {
+            case .hull:    node.position = CGPoint(x: 0, y: -14)
+            case .rig:     node.position = CGPoint(x: 2, y: 26); node.zPosition = -0.5
+            case .trinket: node.position = CGPoint(x: 22, y: 8)
+            }
+            gearNodes.addChild(node)
+        }
+    }
 
     // MARK: - Velocity access
 
@@ -137,6 +192,7 @@ final class Player: SKNode {
         endFlightSegment()
         wake.particleBirthRate = 0
         rocketTrail.particleBirthRate = 0
+        abilityAura.alpha = 0
         physicsBody?.isDynamic = false
         let tilt = SKAction.rotate(toAngle: -0.9, duration: 0.8, shortestUnitArc: true)
         tilt.timingMode = .easeIn
@@ -146,11 +202,13 @@ final class Player: SKNode {
         run(SKAction.group([drop, SKAction.fadeAlpha(to: 0.15, duration: 1.4)]))
     }
 
-    /// Returns true if the hull is now empty (boat should sink).
+    /// Returns true if the hull is now empty (boat should sink). `amount` is the raw hazard
+    /// damage; the rider's and the plating's damage multipliers are applied here so no caller
+    /// has to remember them.
     @discardableResult
     func applyDamage(_ amount: CGFloat) -> Bool {
         guard state != .sunk, amount > 0 else { return false }
-        hull = max(0, hull - amount)
+        hull = max(0, hull - amount * config.damageMultiplier)
         let flash = SKAction.sequence([
             SKAction.colorize(with: .red, colorBlendFactor: 0.7, duration: 0.05),
             SKAction.wait(forDuration: 0.08),
@@ -160,6 +218,9 @@ final class Player: SKNode {
         return hull <= 0
     }
 
+    /// Damage after the multipliers, for the "-25" floating label.
+    func effectiveDamage(_ amount: CGFloat) -> CGFloat { amount * config.damageMultiplier }
+
     func stun(seconds: CGFloat) {
         stunRemaining = max(stunRemaining, seconds)
         isDiving = false
@@ -167,7 +228,7 @@ final class Player: SKNode {
             SKAction.rotate(byAngle: 0.18, duration: 0.08), SKAction.rotate(byAngle: -0.36, duration: 0.16),
             SKAction.rotate(byAngle: 0.18, duration: 0.08)
         ])
-        fishNode.run(SKAction.repeat(wobble, count: Int(seconds / 0.32)), withKey: "stun")
+        riderNode.run(SKAction.repeat(wobble, count: max(1, Int(seconds / 0.32))), withKey: "stun")
     }
 
     func float(seconds: CGFloat) {
@@ -191,6 +252,103 @@ final class Player: SKNode {
         return true
     }
 
+    // MARK: - Abilities
+
+    /// Fire the rider's ability if it is off cooldown. Everything the ability can do to the
+    /// player itself happens here; `.swoop` additionally needs a target from the world, so
+    /// GameScene finishes that one off.
+    ///
+    /// Returns the ability that fired, or nil if it wasn't ready.
+    @discardableResult
+    func beginAbility() -> Ability? {
+        guard isAbilityReady else { return nil }
+        let a = config.ability
+        abilityCooldownRemaining = config.abilityCooldown
+        abilityUses += 1
+
+        if a.duration > 0 {
+            activeAbility = a
+            abilityActiveRemaining = a.duration
+            showAura(for: a)
+        }
+
+        var v = velocity
+        switch a {
+        case .shell:
+            shieldCharges += Tuning.abilityShellCharges
+            showAura(for: a, seconds: 0)
+        case .inkJet:
+            v.dx += Tuning.abilityInkJetForward
+            v.dy += Tuning.abilityInkJetUp
+            velocity = v
+            rocketTrail.particleBirthRate = 180
+            rocketTrail.removeAction(forKey: "trailOff")
+            rocketTrail.run(SKAction.sequence([
+                SKAction.wait(forDuration: 0.3),
+                SKAction.run { [weak self] in self?.rocketTrail.particleBirthRate = 0 }
+            ]), withKey: "trailOff")
+        case .slam:
+            v.dy = -max(Tuning.abilitySlamDownSpeed, -v.dy)
+            velocity = v
+            slamArmed = true
+        case .tuck, .puff, .glide, .frenzy, .swoop:
+            break   // timed effects run in update(dt:); swoop is finished by the scene
+        }
+        return a
+    }
+
+    /// GameScene's half of `.swoop`: point the flight at `target`, keeping almost all speed.
+    func swoop(toward target: CGPoint) {
+        let dx = target.x - position.x
+        let dy = target.y - position.y
+        let length = (dx * dx + dy * dy).squareRoot()
+        guard length > 1 else { return }
+        let speed = boatSpeed * Tuning.abilitySwoopSpeedKeep
+        velocity = CGVector(dx: dx / length * speed, dy: dy / length * speed)
+    }
+
+    /// Spend a shield on an incoming hazard. Returns true if one was available.
+    func consumeShield() -> Bool {
+        guard shieldCharges > 0 else { return false }
+        shieldCharges -= 1
+        if shieldCharges == 0 { abilityAura.removeAllActions(); abilityAura.run(.fadeOut(withDuration: 0.2)) }
+        return true
+    }
+
+    /// Consumed by WaterSkipSystem the moment the slam lands.
+    func consumeSlam() -> Bool {
+        guard slamArmed else { return false }
+        slamArmed = false
+        return true
+    }
+
+    private func showAura(for ability: Ability, seconds: CGFloat? = nil) {
+        let colour: UIColor
+        switch ability {
+        case .tuck:   colour = UIColor(red: 0.6, green: 0.9, blue: 1, alpha: 1)
+        case .puff:   colour = UIColor(red: 1, green: 0.85, blue: 0.45, alpha: 1)
+        case .glide:  colour = UIColor(red: 0.75, green: 1, blue: 0.85, alpha: 1)
+        case .shell:  colour = UIColor(red: 1, green: 0.75, blue: 0.35, alpha: 1)
+        case .frenzy: colour = UIColor(red: 1, green: 0.45, blue: 0.45, alpha: 1)
+        default:      colour = UIColor(red: 0.8, green: 0.9, blue: 1, alpha: 1)
+        }
+        abilityAura.strokeColor = colour
+        abilityAura.removeAllActions()
+        abilityAura.alpha = 0.9
+        let hold = seconds ?? ability.duration
+        if hold > 0 {
+            abilityAura.run(.sequence([
+                .repeat(.sequence([.scale(to: 1.12, duration: 0.3), .scale(to: 1, duration: 0.3)]),
+                        count: max(1, Int(hold / 0.6))),
+                .fadeOut(withDuration: 0.2)
+            ]))
+        } else {
+            // Shell has no duration — the ring stays until a hazard eats it.
+            abilityAura.run(.repeatForever(.sequence([.fadeAlpha(to: 0.4, duration: 0.5),
+                                                      .fadeAlpha(to: 0.9, duration: 0.5)])))
+        }
+    }
+
     // MARK: - Per-frame integration
 
     /// Integrates gravity, drag and zone forces into the physics velocity. SpriteKit then moves
@@ -198,6 +356,11 @@ final class Player: SKNode {
     func update(dt: CGFloat) {
         stunRemaining = max(0, stunRemaining - dt)
         floatRemaining = max(0, floatRemaining - dt)
+        abilityCooldownRemaining = max(0, abilityCooldownRemaining - dt)
+        if abilityActiveRemaining > 0 {
+            abilityActiveRemaining -= dt
+            if abilityActiveRemaining <= 0 { abilityActiveRemaining = 0; activeAbility = nil }
+        }
         if isStunned { isDiving = false }
 
         switch state {
@@ -205,15 +368,40 @@ final class Player: SKNode {
             var v = velocity
             var gMult: CGFloat = isDiving ? Tuning.diveGravityMultiplier : 1
             if isFloating { gMult *= Tuning.balloonGravityMultiplier }
+            gMult *= config.gravityMultiplier                     // Box Kite, featherweight days
+            var dragRate = config.airDrag
+
+            // The rider's timed ability, if one is running.
+            if let active = activeAbility {
+                switch active {
+                case .tuck:
+                    dragRate *= Tuning.abilityTuckDragMultiplier
+                    v.dx += Tuning.abilityTuckPush * dt
+                case .glide:
+                    gMult *= Tuning.abilityGlideGravityMultiplier
+                    v.dx += Tuning.abilityGlidePush * dt
+                case .puff, .frenzy:
+                    break   // read by WaterSkipSystem / GameScene, not by the integrator
+                case .shell, .inkJet, .slam, .swoop:
+                    break   // instant: never left running
+                }
+            }
+
             v.dy += Tuning.gravity * gMult * dt
+            v.dx += config.sailPush * dt                          // Storm Sail
             if liftZones > 0 {
                 v.dy += Tuning.birdLift * dt
                 v.dx += Tuning.birdPush * dt
             }
             if downdraftZones > 0 {
-                v.dy -= Tuning.stormCloudPush * dt
+                // With a Storm Sail rigged, a squall drives you along instead of down.
+                if config.stormPushesForward {
+                    v.dx += Tuning.stormCloudPush * dt
+                } else {
+                    v.dy -= Tuning.stormCloudPush * dt
+                }
             }
-            var drag = max(0, 1 - config.airDrag * dt)
+            var drag = max(0, 1 - dragRate * dt)
             if whirlpoolZones > 0 {
                 v.dy -= Tuning.whirlpoolPull * dt
                 drag *= max(0, 1 - Tuning.whirlpoolDrag * dt)
@@ -229,7 +417,7 @@ final class Player: SKNode {
 
         case .plowing:
             var v = velocity
-            v.dx *= exp(-Tuning.plowDrag * dt)
+            v.dx *= exp(-config.plowDrag * dt)                    // Beach Wheels live here
             if whirlpoolZones > 0 { v.dx *= exp(-Tuning.whirlpoolDrag * 3 * dt) }
             v.dy = 0
             velocity = v
@@ -241,9 +429,9 @@ final class Player: SKNode {
             break   // aim phase: GameScene points the visual along the cannon barrel
         }
 
-        // Marlow bobs a little so he reads as alive.
+        // The rider bobs a little so they read as alive.
         fishBob += dt
-        fishNode.position.y = 18 + sin(fishBob * 7) * 1.5
+        riderNode.position.y = 18 + sin(fishBob * 7) * 1.5
     }
 
     // MARK: - Emitters

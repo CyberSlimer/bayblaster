@@ -120,6 +120,32 @@ enum Placeholders {
         case "whirlpool":   return whirlpool()
         case "flag":        return flag(best: false)
         case "bestFlag":    return flag(best: true)
+        // Unlockable riders (Marlow keeps the original "fish" key)
+        case "crewBristle": return crewBristle()
+        case "crewNixie":   return crewNixie()
+        case "crewGilly":   return crewGilly()
+        case "crewBruno":   return crewBruno()
+        case "crewTock":    return crewTock()
+        case "crewPip":     return crewPip()
+        case "crewChum":    return crewChum()
+        // Gear
+        case "gearWheels":         return gearWheels()
+        case "gearPontoons":       return gearPontoons()
+        case "gearSpringKeel":     return gearSpringKeel()
+        case "gearStormSail":      return gearStormSail()
+        case "gearBoxKite":        return gearBoxKite()
+        case "gearJetVent":        return gearJetVent()
+        case "gearCoinMagnet":     return gearCoinMagnet()
+        case "gearLuckyHorseshoe": return gearLuckyHorseshoe()
+        case "gearBarnaclePlate":  return gearBarnaclePlate()
+        // Unlockable launchers
+        case "rodStand":    return rodStand()
+        case "rodReel":     return rodReel()
+        case "slingPost":   return slingPost()
+        case "slingshot":   return slingshot()
+        case "torpedoRig":  return torpedoRig()
+        case "torpedoTube": return torpedoTube()
+        case "trophyIcon":  return trophyIcon()
         default:            return missing()
         }
     }
@@ -594,6 +620,394 @@ enum Placeholders {
         let n = SKNode()
         shape(polygon([CGPoint(x: -8, y: -4), CGPoint(x: 6, y: -4), CGPoint(x: 12, y: 0), CGPoint(x: 6, y: 4), CGPoint(x: -8, y: 4)]), fill: UIColor(red: 0.9, green: 0.9, blue: 0.95, alpha: 1), in: n)
         shape(polygon([CGPoint(x: -8, y: 0), CGPoint(x: -14, y: 5), CGPoint(x: -6, y: 0), CGPoint(x: -14, y: -5)]), fill: UIColor(red: 1, green: 0.5, blue: 0.15, alpha: 1), stroke: .clear, in: n)
+        return n
+    }
+
+
+    // MARK: - Unlockable riders (Core/Crew.swift)
+    // Each is drawn to the same footprint as Marlow (~34×18, origin at the belly) so the
+    // rider swap never moves the boat's centre of mass or the goggles-height bob.
+
+    /// Bristle the pufferfish — round, spiky, unbothered.
+    static func crewBristle() -> SKNode {
+        let n = SKNode()
+        let body = UIColor(red: 0.95, green: 0.78, blue: 0.35, alpha: 1)
+        for i in 0..<10 {                               // spikes around the sphere
+            let a = CGFloat(i) / 10 * .pi * 2
+            shape(polygon([CGPoint(x: cos(a) * 10, y: sin(a) * 10 + 2),
+                           CGPoint(x: cos(a + 0.3) * 10, y: sin(a + 0.3) * 10 + 2),
+                           CGPoint(x: cos(a + 0.15) * 16, y: sin(a + 0.15) * 16 + 2)]),
+                  fill: body.darker(0.18), stroke: .clear, in: n)
+        }
+        circle(11, at: CGPoint(x: 0, y: 2), fill: body, in: n)
+        circle(3.2, at: CGPoint(x: 7, y: 4), fill: .white, stroke: .clear, in: n)
+        circle(1.6, at: CGPoint(x: 8, y: 4), fill: .black, stroke: .clear, in: n)
+        shape(polygon([CGPoint(x: -11, y: 2), CGPoint(x: -18, y: 8), CGPoint(x: -18, y: -4)]),
+              fill: body.darker(0.1), in: n)
+        return n
+    }
+
+    /// Nixie the flying fish — long wing-fins held out wide.
+    static func crewNixie() -> SKNode {
+        let n = SKNode()
+        let body = UIColor(red: 0.55, green: 0.85, blue: 0.7, alpha: 1)
+        shape(polygon([CGPoint(x: -12, y: 0), CGPoint(x: -22, y: 7), CGPoint(x: -20, y: 0), CGPoint(x: -22, y: -7)]),
+              fill: body.darker(0.12), in: n)
+        // wings, above and below
+        shape(polygon([CGPoint(x: -2, y: 4), CGPoint(x: -14, y: 16), CGPoint(x: 8, y: 6)]),
+              fill: UIColor(red: 0.7, green: 0.95, blue: 1, alpha: 0.9), in: n)
+        shape(polygon([CGPoint(x: -2, y: -3), CGPoint(x: -13, y: -13), CGPoint(x: 7, y: -5)]),
+              fill: UIColor(red: 0.7, green: 0.95, blue: 1, alpha: 0.75), in: n)
+        let e = SKShapeNode(ellipseOf: CGSize(width: 28, height: 13))
+        e.fillColor = body; e.strokeColor = body.darker(0.3); e.lineWidth = 2
+        e.position = CGPoint(x: 0, y: 1)
+        n.addChild(e)
+        circle(3, at: CGPoint(x: 9, y: 2), fill: .white, stroke: .clear, in: n)
+        circle(1.5, at: CGPoint(x: 10, y: 2), fill: .black, stroke: .clear, in: n)
+        return n
+    }
+
+    /// Gilly the squid — mantle up front, tentacles trailing behind.
+    static func crewGilly() -> SKNode {
+        let n = SKNode()
+        let body = UIColor(red: 0.85, green: 0.5, blue: 0.85, alpha: 1)
+        for i in 0..<5 {                                // tentacles
+            let y = CGFloat(i - 2) * 3.4
+            let p = CGMutablePath()
+            p.move(to: CGPoint(x: -6, y: y + 2))
+            p.addQuadCurve(to: CGPoint(x: -22, y: y - 2), control: CGPoint(x: -14, y: y + 6))
+            let t = SKShapeNode(path: p)
+            t.strokeColor = body.darker(0.15); t.lineWidth = 2.6; t.lineCap = .round
+            n.addChild(t)
+        }
+        let mantle = SKShapeNode(ellipseOf: CGSize(width: 26, height: 15))
+        mantle.fillColor = body; mantle.strokeColor = body.darker(0.3); mantle.lineWidth = 2
+        mantle.position = CGPoint(x: 3, y: 2)
+        n.addChild(mantle)
+        shape(polygon([CGPoint(x: 12, y: 8), CGPoint(x: 20, y: 12), CGPoint(x: 15, y: 3)]), fill: body.lighter(0.05), in: n)
+        circle(3.4, at: CGPoint(x: 8, y: 3), fill: .white, stroke: .clear, in: n)
+        circle(1.7, at: CGPoint(x: 9, y: 3), fill: .black, stroke: .clear, in: n)
+        return n
+    }
+
+    /// Bruno the sea otter — broad chest, little paws up.
+    static func crewBruno() -> SKNode {
+        let n = SKNode()
+        let fur = UIColor(red: 0.55, green: 0.38, blue: 0.24, alpha: 1)
+        shape(polygon([CGPoint(x: -12, y: -2), CGPoint(x: -24, y: 2), CGPoint(x: -12, y: 4)]), fill: fur.darker(0.1), in: n)
+        let body = SKShapeNode(ellipseOf: CGSize(width: 26, height: 17))
+        body.fillColor = fur; body.strokeColor = fur.darker(0.25); body.lineWidth = 2
+        n.addChild(body)
+        circle(8, at: CGPoint(x: 9, y: 5), fill: fur.lighter(0.08), in: n)          // head
+        circle(2.6, at: CGPoint(x: 5, y: 11), fill: fur.darker(0.15), in: n)        // ears
+        circle(2.6, at: CGPoint(x: 13, y: 11), fill: fur.darker(0.15), in: n)
+        circle(3.4, at: CGPoint(x: 11, y: 3), fill: UIColor(red: 0.95, green: 0.88, blue: 0.78, alpha: 1), stroke: .clear, in: n)
+        circle(1.3, at: CGPoint(x: 12, y: 3.5), fill: .black, stroke: .clear, in: n)
+        circle(1.4, at: CGPoint(x: 7, y: 6), fill: .black, stroke: .clear, in: n)
+        circle(4, at: CGPoint(x: 0, y: -5), fill: fur.lighter(0.1), in: n)          // paws
+        return n
+    }
+
+    /// Tock the hermit crab — a shell with a crab leaning out of it.
+    static func crewTock() -> SKNode {
+        let n = SKNode()
+        let shell = UIColor(red: 0.85, green: 0.66, blue: 0.45, alpha: 1)
+        let crab = UIColor(red: 0.9, green: 0.35, blue: 0.3, alpha: 1)
+        circle(11, at: CGPoint(x: -4, y: 3), fill: shell, in: n)
+        let spiral = SKShapeNode(circleOfRadius: 6.5)
+        spiral.position = CGPoint(x: -4, y: 3)
+        spiral.fillColor = .clear; spiral.strokeColor = shell.darker(0.25); spiral.lineWidth = 2
+        n.addChild(spiral)
+        circle(2.5, at: CGPoint(x: -4, y: 3), fill: shell.darker(0.2), stroke: .clear, in: n)
+        circle(6, at: CGPoint(x: 9, y: 0), fill: crab, in: n)                        // body
+        for dy in [-4, 0, 4] {                                                        // legs
+            let p = CGMutablePath()
+            p.move(to: CGPoint(x: 12, y: CGFloat(dy)))
+            p.addLine(to: CGPoint(x: 18, y: CGFloat(dy) - 4))
+            let l = SKShapeNode(path: p)
+            l.strokeColor = crab.darker(0.15); l.lineWidth = 2; l.lineCap = .round
+            n.addChild(l)
+        }
+        circle(2.2, at: CGPoint(x: 8, y: 6), fill: .white, stroke: .clear, in: n)     // eyestalks
+        circle(2.2, at: CGPoint(x: 13, y: 5), fill: .white, stroke: .clear, in: n)
+        circle(1.1, at: CGPoint(x: 8, y: 6), fill: .black, stroke: .clear, in: n)
+        circle(1.1, at: CGPoint(x: 13, y: 5), fill: .black, stroke: .clear, in: n)
+        return n
+    }
+
+    /// Pip the seagull — white, wings half-folded, very smug.
+    static func crewPip() -> SKNode {
+        let n = SKNode()
+        let feather = UIColor(red: 0.96, green: 0.96, blue: 0.98, alpha: 1)
+        shape(polygon([CGPoint(x: -10, y: 1), CGPoint(x: -22, y: 6), CGPoint(x: -20, y: -3)]),
+              fill: feather.darker(0.12), in: n)
+        let body = SKShapeNode(ellipseOf: CGSize(width: 26, height: 15))
+        body.fillColor = feather; body.strokeColor = feather.darker(0.25); body.lineWidth = 2
+        n.addChild(body)
+        shape(polygon([CGPoint(x: 2, y: 4), CGPoint(x: -10, y: 13), CGPoint(x: 6, y: 5)]),
+              fill: UIColor(red: 0.7, green: 0.72, blue: 0.78, alpha: 1), in: n)      // wing
+        circle(6, at: CGPoint(x: 10, y: 6), fill: feather, in: n)                     // head
+        shape(polygon([CGPoint(x: 14, y: 6), CGPoint(x: 23, y: 4), CGPoint(x: 14, y: 2)]),
+              fill: UIColor(red: 1, green: 0.72, blue: 0.2, alpha: 1), in: n)         // beak
+        circle(1.6, at: CGPoint(x: 11, y: 8), fill: .black, stroke: .clear, in: n)
+        return n
+    }
+
+    /// Chum the baby shark — small, grey, all teeth.
+    static func crewChum() -> SKNode {
+        let n = SKNode()
+        let grey = UIColor(red: 0.52, green: 0.58, blue: 0.66, alpha: 1)
+        shape(polygon([CGPoint(x: -12, y: 0), CGPoint(x: -23, y: 9), CGPoint(x: -19, y: 0), CGPoint(x: -23, y: -7)]),
+              fill: grey.darker(0.12), in: n)
+        let body = SKShapeNode(ellipseOf: CGSize(width: 30, height: 15))
+        body.fillColor = grey; body.strokeColor = grey.darker(0.3); body.lineWidth = 2
+        n.addChild(body)
+        shape(polygon([CGPoint(x: -3, y: 6), CGPoint(x: 2, y: 15), CGPoint(x: 7, y: 6)]), fill: grey.darker(0.15), in: n)
+        rect(CGSize(width: 22, height: 6), at: CGPoint(x: -1, y: -4), corner: 3,
+             fill: UIColor(red: 0.92, green: 0.94, blue: 0.96, alpha: 1), stroke: .clear, in: n) // pale belly
+        // grin
+        for i in 0..<5 {
+            shape(polygon([CGPoint(x: CGFloat(4 + i * 3), y: -2), CGPoint(x: CGFloat(5.5 + i * 3), y: -5.5), CGPoint(x: CGFloat(7 + i * 3), y: -2)]),
+                  fill: .white, stroke: .clear, in: n)
+        }
+        circle(2.6, at: CGPoint(x: 9, y: 3), fill: .white, stroke: .clear, in: n)
+        circle(1.3, at: CGPoint(x: 10, y: 3), fill: .black, stroke: .clear, in: n)
+        return n
+    }
+
+    // MARK: - Gear (Core/Gear.swift)
+    // Hull parts are drawn to hang under the hull, rigs to stand above it, trinkets small
+    // enough to sit on the gunwale. Player.addGearArt places them.
+
+    static func gearWheels() -> SKNode {
+        let n = SKNode()
+        let tyre = UIColor(red: 0.18, green: 0.18, blue: 0.2, alpha: 1)
+        for dx in [-18, 18] {
+            circle(9, at: CGPoint(x: CGFloat(dx), y: 0), fill: tyre, stroke: tyre.lighter(0.1), in: n)
+            circle(3.5, at: CGPoint(x: CGFloat(dx), y: 0), fill: UIColor(red: 0.8, green: 0.8, blue: 0.85, alpha: 1), stroke: .clear, in: n)
+        }
+        rect(CGSize(width: 40, height: 4), at: CGPoint(x: 0, y: 4), corner: 2,
+             fill: UIColor(red: 0.45, green: 0.45, blue: 0.5, alpha: 1), in: n)
+        return n
+    }
+
+    static func gearPontoons() -> SKNode {
+        let n = SKNode()
+        let hull = UIColor(red: 0.95, green: 0.95, blue: 0.98, alpha: 1)
+        for dx in [-20, 20] {
+            let p = SKShapeNode(ellipseOf: CGSize(width: 30, height: 12))
+            p.position = CGPoint(x: CGFloat(dx), y: 0)
+            p.fillColor = hull; p.strokeColor = UIColor(red: 0.3, green: 0.55, blue: 0.85, alpha: 1); p.lineWidth = 2
+            n.addChild(p)
+        }
+        return n
+    }
+
+    static func gearSpringKeel() -> SKNode {
+        let n = SKNode()
+        let steel = UIColor(red: 0.75, green: 0.78, blue: 0.85, alpha: 1)
+        let coil = CGMutablePath()
+        coil.move(to: CGPoint(x: -10, y: 6))
+        for i in 0..<6 {                                  // zig-zag spring
+            let x = CGFloat(-10 + i * 4)
+            coil.addLine(to: CGPoint(x: x + 2, y: i % 2 == 0 ? -6 : 6))
+        }
+        let c = SKShapeNode(path: coil)
+        c.strokeColor = steel; c.lineWidth = 3; c.fillColor = .clear; c.lineJoin = .round
+        n.addChild(c)
+        rect(CGSize(width: 34, height: 4), at: CGPoint(x: 0, y: -9), corner: 2, fill: steel.darker(0.2), in: n)
+        return n
+    }
+
+    static func gearStormSail() -> SKNode {
+        let n = SKNode()
+        rect(CGSize(width: 3, height: 40), at: CGPoint(x: -8, y: 0), corner: 1.5,
+             fill: UIColor(red: 0.6, green: 0.42, blue: 0.25, alpha: 1), in: n)
+        let sail = CGMutablePath()
+        sail.move(to: CGPoint(x: -7, y: 20))
+        sail.addQuadCurve(to: CGPoint(x: -7, y: -14), control: CGPoint(x: 22, y: 2))
+        sail.closeSubpath()
+        shape(sail, fill: UIColor(red: 0.98, green: 0.93, blue: 0.85, alpha: 1),
+              stroke: UIColor(red: 0.85, green: 0.35, blue: 0.3, alpha: 1), in: n)
+        return n
+    }
+
+    static func gearBoxKite() -> SKNode {
+        let n = SKNode()
+        let cloth = UIColor(red: 1, green: 0.55, blue: 0.35, alpha: 1)
+        rect(CGSize(width: 24, height: 14), at: CGPoint(x: 0, y: 26), corner: 2, fill: cloth, in: n)
+        rect(CGSize(width: 24, height: 14), at: CGPoint(x: 0, y: 6), corner: 2, fill: cloth.darker(0.12), in: n)
+        for dx in [-11, 11] {
+            rect(CGSize(width: 2, height: 36), at: CGPoint(x: CGFloat(dx), y: 16), corner: 1,
+                 fill: UIColor(red: 0.6, green: 0.45, blue: 0.3, alpha: 1), stroke: .clear, in: n)
+        }
+        let line = CGMutablePath()
+        line.move(to: CGPoint(x: 0, y: 0))
+        line.addLine(to: CGPoint(x: -6, y: -14))
+        let l = SKShapeNode(path: line)
+        l.strokeColor = UIColor.white.withAlphaComponent(0.7); l.lineWidth = 1.5
+        n.addChild(l)
+        return n
+    }
+
+    static func gearJetVent() -> SKNode {
+        let n = SKNode()
+        let metal = UIColor(red: 0.62, green: 0.66, blue: 0.72, alpha: 1)
+        shape(polygon([CGPoint(x: 8, y: 6), CGPoint(x: -10, y: 8), CGPoint(x: -14, y: 0), CGPoint(x: -10, y: -8), CGPoint(x: 8, y: -6)]),
+              fill: metal, in: n)
+        circle(5, at: CGPoint(x: -12, y: 0), fill: UIColor(red: 1, green: 0.6, blue: 0.2, alpha: 1),
+               stroke: UIColor(red: 1, green: 0.85, blue: 0.4, alpha: 1), in: n)
+        rect(CGSize(width: 6, height: 16), at: CGPoint(x: 8, y: 0), corner: 2, fill: metal.darker(0.2), in: n)
+        return n
+    }
+
+    static func gearCoinMagnet() -> SKNode {
+        let n = SKNode()
+        let horseshoe = CGMutablePath()
+        horseshoe.addArc(center: .zero, radius: 8, startAngle: .pi * 0.15, endAngle: .pi * 0.85, clockwise: false)
+        let h = SKShapeNode(path: horseshoe)
+        h.strokeColor = UIColor(red: 0.85, green: 0.25, blue: 0.2, alpha: 1)
+        h.lineWidth = 5; h.lineCap = .butt; h.fillColor = .clear
+        n.addChild(h)
+        rect(CGSize(width: 5, height: 5), at: CGPoint(x: -7.2, y: 0.5), fill: UIColor(red: 0.85, green: 0.85, blue: 0.9, alpha: 1), stroke: .clear, in: n)
+        rect(CGSize(width: 5, height: 5), at: CGPoint(x: 7.2, y: 0.5), fill: UIColor(red: 0.85, green: 0.85, blue: 0.9, alpha: 1), stroke: .clear, in: n)
+        return n
+    }
+
+    static func gearLuckyHorseshoe() -> SKNode {
+        let n = SKNode()
+        let gold = UIColor(red: 0.95, green: 0.78, blue: 0.25, alpha: 1)
+        let p = CGMutablePath()
+        p.addArc(center: .zero, radius: 8, startAngle: -.pi * 0.9, endAngle: .pi * 0.9, clockwise: false)
+        let h = SKShapeNode(path: p)
+        h.strokeColor = gold; h.lineWidth = 4.5; h.fillColor = .clear; h.lineCap = .round
+        n.addChild(h)
+        for a in [-0.9, 0.9] {                                     // nail holes
+            circle(1.2, at: CGPoint(x: cos(CGFloat(a) * .pi) * 8, y: sin(CGFloat(a) * .pi) * 8),
+                   fill: gold.darker(0.35), stroke: .clear, in: n)
+        }
+        return n
+    }
+
+    static func gearBarnaclePlate() -> SKNode {
+        let n = SKNode()
+        let plate = UIColor(red: 0.55, green: 0.6, blue: 0.62, alpha: 1)
+        rect(CGSize(width: 22, height: 14), at: .zero, corner: 3, fill: plate, in: n)
+        for (dx, dy, r) in [(-6.0, 3.0, 3.5), (2.0, -2.0, 4.0), (7.0, 4.0, 2.8)] {
+            circle(CGFloat(r), at: CGPoint(x: CGFloat(dx), y: CGFloat(dy)),
+                   fill: UIColor(red: 0.9, green: 0.89, blue: 0.85, alpha: 1), in: n)
+            circle(CGFloat(r) * 0.4, at: CGPoint(x: CGFloat(dx), y: CGFloat(dy)),
+                   fill: plate.darker(0.25), stroke: .clear, in: n)
+        }
+        return n
+    }
+
+    // MARK: - Unlockable launchers (Core/Launchers.swift)
+    // Each pairs a "tower" (drawn at the water line) with a "barrel" (rotated to the aim
+    // angle, origin at the pivot) exactly like the lighthouse + cannon.
+
+    /// Rod holder wedged in the sand.
+    static func rodStand() -> SKNode {
+        let n = SKNode()
+        let wood = UIColor(red: 0.55, green: 0.4, blue: 0.26, alpha: 1)
+        shape(polygon([CGPoint(x: 18, y: 0), CGPoint(x: 62, y: 0), CGPoint(x: 56, y: 96), CGPoint(x: 30, y: 96)]),
+              fill: wood, in: n)
+        rect(CGSize(width: 52, height: 10), at: CGPoint(x: 42, y: 92), corner: 4, fill: wood.darker(0.15), in: n)
+        rect(CGSize(width: 58, height: 14), at: CGPoint(x: 40, y: 6), corner: 6, fill: wood.darker(0.25), in: n)
+        // a bucket of bait, because why not
+        rect(CGSize(width: 26, height: 22), at: CGPoint(x: 92, y: 11), corner: 4,
+             fill: UIColor(red: 0.3, green: 0.6, blue: 0.85, alpha: 1), in: n)
+        return n
+    }
+
+    /// The rod itself: a long tapering blank with a reel at the butt.
+    static func rodReel() -> SKNode {
+        let n = SKNode()
+        let blank = CGMutablePath()
+        blank.move(to: CGPoint(x: 0, y: -3))
+        blank.addLine(to: CGPoint(x: 96, y: -1))
+        blank.addLine(to: CGPoint(x: 96, y: 1))
+        blank.addLine(to: CGPoint(x: 0, y: 3))
+        blank.closeSubpath()
+        shape(blank, fill: UIColor(red: 0.2, green: 0.24, blue: 0.3, alpha: 1), lineWidth: 1.5, in: n)
+        for x in [34, 58, 82] {                              // line guides
+            circle(3.5, at: CGPoint(x: CGFloat(x), y: 4), fill: .clear,
+                   stroke: UIColor(red: 0.8, green: 0.82, blue: 0.9, alpha: 1), lineWidth: 1.5, in: n)
+        }
+        circle(11, at: CGPoint(x: 6, y: -9), fill: UIColor(red: 0.75, green: 0.2, blue: 0.2, alpha: 1), in: n)
+        circle(4, at: CGPoint(x: 6, y: -9), fill: UIColor(red: 0.9, green: 0.9, blue: 0.95, alpha: 1), stroke: .clear, in: n)
+        circle(5, at: CGPoint(x: 98, y: 0), fill: UIColor(red: 0.95, green: 0.85, blue: 0.3, alpha: 1), in: n)  // the lure
+        return n
+    }
+
+    /// Two posts sunk into the shallows.
+    static func slingPost() -> SKNode {
+        let n = SKNode()
+        let wood = UIColor(red: 0.48, green: 0.35, blue: 0.24, alpha: 1)
+        for dx in [22, 74] {
+            rect(CGSize(width: 16, height: 84), at: CGPoint(x: CGFloat(dx), y: 42), corner: 5, fill: wood, in: n)
+            circle(9, at: CGPoint(x: CGFloat(dx), y: 84), fill: wood.darker(0.18), in: n)
+        }
+        rect(CGSize(width: 74, height: 10), at: CGPoint(x: 48, y: 8), corner: 4, fill: wood.darker(0.28), in: n)
+        return n
+    }
+
+    /// The pouch and band, drawn along +x so the barrel rotation points it at the aim angle.
+    static func slingshot() -> SKNode {
+        let n = SKNode()
+        let band = UIColor(red: 0.25, green: 0.2, blue: 0.2, alpha: 1)
+        for dy in [16, -16] {                                 // the two rubber bands
+            let p = CGMutablePath()
+            p.move(to: CGPoint(x: -14, y: CGFloat(dy)))
+            p.addLine(to: CGPoint(x: 58, y: 0))
+            let b = SKShapeNode(path: p)
+            b.strokeColor = band; b.lineWidth = 4; b.lineCap = .round
+            n.addChild(b)
+        }
+        rect(CGSize(width: 20, height: 26), at: CGPoint(x: 62, y: 0), corner: 6,
+             fill: UIColor(red: 0.6, green: 0.42, blue: 0.3, alpha: 1), in: n)   // pouch
+        return n
+    }
+
+    /// A rusted launch cradle sitting right on the water.
+    static func torpedoRig() -> SKNode {
+        let n = SKNode()
+        let rust = UIColor(red: 0.45, green: 0.35, blue: 0.3, alpha: 1)
+        shape(polygon([CGPoint(x: 6, y: 0), CGPoint(x: 96, y: 0), CGPoint(x: 86, y: 40), CGPoint(x: 18, y: 40)]),
+              fill: rust, in: n)
+        rect(CGSize(width: 90, height: 10), at: CGPoint(x: 51, y: 5), corner: 3, fill: rust.darker(0.2), in: n)
+        for dx in [30, 52, 74] {
+            circle(4, at: CGPoint(x: CGFloat(dx), y: 26), fill: UIColor(red: 0.8, green: 0.75, blue: 0.5, alpha: 1), stroke: .clear, in: n)
+        }
+        return n
+    }
+
+    /// The tube: wide, blunt and low.
+    static func torpedoTube() -> SKNode {
+        let n = SKNode()
+        let metal = UIColor(red: 0.42, green: 0.48, blue: 0.54, alpha: 1)
+        rect(CGSize(width: 86, height: 30), at: CGPoint(x: 42, y: 0), corner: 12, fill: metal, in: n)
+        circle(15, at: CGPoint(x: 84, y: 0), fill: UIColor(red: 0.12, green: 0.14, blue: 0.18, alpha: 1),
+               stroke: metal.lighter(0.15), lineWidth: 3, in: n)
+        for x in [22, 44, 66] {                               // banding
+            rect(CGSize(width: 4, height: 32), at: CGPoint(x: CGFloat(x), y: 0), corner: 2,
+                 fill: metal.darker(0.2), stroke: .clear, in: n)
+        }
+        rect(CGSize(width: 18, height: 12), at: CGPoint(x: 6, y: 18), corner: 4,
+             fill: UIColor(red: 0.85, green: 0.6, blue: 0.2, alpha: 1), in: n)   // valve wheel housing
+        return n
+    }
+
+    /// Small trophy used on the achievements board.
+    static func trophyIcon() -> SKNode {
+        let n = SKNode()
+        let gold = UIColor(red: 1, green: 0.82, blue: 0.28, alpha: 1)
+        shape(polygon([CGPoint(x: -7, y: 8), CGPoint(x: 7, y: 8), CGPoint(x: 4, y: -3), CGPoint(x: -4, y: -3)]), fill: gold, in: n)
+        rect(CGSize(width: 12, height: 3), at: CGPoint(x: 0, y: -6), corner: 1.5, fill: gold.darker(0.2), in: n)
+        rect(CGSize(width: 4, height: 4), at: CGPoint(x: 0, y: -3), corner: 1, fill: gold.darker(0.1), stroke: .clear, in: n)
+        for dx in [-9, 9] {
+            circle(3.5, at: CGPoint(x: CGFloat(dx), y: 6), fill: .clear, stroke: gold, lineWidth: 2, in: n)
+        }
         return n
     }
 

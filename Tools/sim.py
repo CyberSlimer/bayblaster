@@ -1,5 +1,12 @@
-"""Pacing simulation mirroring Constants.swift + WaterSkipSystem + WorldSpawner.
-Run: python sim.py
+"""Pacing simulation mirroring Constants.swift + Loadout.swift + WaterSkipSystem + WorldSpawner.
+
+Mirrors the resolved per-run numbers the game actually uses, which since the locker update
+means five layers, in the same order as UpgradeConfig.init:
+    upgrade tiers -> crew perk -> equipped gear -> prestige -> daily modifier
+plus the rider's in-flight ability, which a competent player fires whenever it is off
+cooldown and it would help.
+
+Run: python3 sim.py
 """
 import math, random, statistics
 
@@ -17,6 +24,9 @@ ROCKET_STR   = [0, 420, 420, 420, 600, 800]
 LURE_BOOST   = [1.0, 1.25, 1.5, 1.8, 2.1, 2.5]
 
 SKIP_V_REST = 0.62
+SKIP_RET_CEIL  = 0.985      # Tuning.skipRetentionCeiling
+SKIP_REST_CEIL = 0.90       # Tuning.skipRestitutionCeiling
+FORCED_SKIP_MIN_BOUNCE = 260
 SKIP_MIN_VY = 90.0
 SKIP_MAX_ANGLE = math.radians(42)
 DIVE_MAX_ANGLE = math.radians(64)
@@ -53,6 +63,140 @@ WHIRL_PULL, WHIRL_DRAG = 900, 0.35
 DOLPHIN_UP, DOLPHIN_FWD = 700, 260
 BALLOON_SEC, BALLOON_G, BALLOON_LIFT = 2.2, 0.3, 220
 
+# ---------------------------------------------------------------- crew (Core/Crew.swift)
+# (launch_mult, hull_mult, drag_mult, retention_bonus, bonus_rockets, coin_mult,
+#  damage_mult, cooldown_mult, ability)
+CREW = {
+    'marlow':  (1.00, 1.00, 1.00, 0.000, 0, 1.0, 1.00, 0.8, 'tuck'),
+    'bristle': (1.00, 1.35, 0.88, 0.012, 0, 1.0, 1.00, 1.0, 'puff'),
+    'nixie':   (1.00, 1.00, 0.68, 0.000, 0, 1.0, 1.00, 1.0, 'glide'),
+    'gilly':   (1.00, 1.00, 1.00, 0.000, 1, 1.0, 1.00, 1.0, 'inkjet'),
+    'bruno':   (1.00, 1.00, 0.88, 0.045, 0, 1.0, 1.00, 1.0, 'slam'),
+    'tock':    (1.00, 1.25, 0.80, 0.000, 0, 1.0, 0.50, 1.0, 'shell'),
+    'pip':     (1.00, 1.00, 1.00, 0.000, 0, 1.7, 1.00, 1.0, 'swoop'),
+    'chum':    (1.20, 0.85, 0.80, 0.000, 0, 1.0, 1.00, 1.0, 'frenzy'),
+}
+
+# ---------------------------------------------------------------- abilities
+ABILITY = {   # (duration_s, cooldown_s)
+    'tuck':   (1.2, 7), 'puff':   (2.2, 7), 'glide': (1.6, 7), 'shell':  (0.0, 6),
+    'inkjet': (0.0, 5), 'slam':   (0.0, 6), 'swoop': (0.0, 5), 'frenzy': (4.0, 10),
+}
+AB_MIN_CD = 2.0
+TUCK_DRAG_MULT, TUCK_PUSH = 0.55, 100
+PUFF_REST_MULT = 1.15
+GLIDE_G_MULT, GLIDE_PUSH = 0.55, 70
+SHELL_CHARGES = 2
+INKJET_FWD, INKJET_UP = 150, 40
+SLAM_DOWN, SLAM_REST_MULT, SLAM_FWD_BONUS = 900, 1.50, 1.22
+SWOOP_RANGE, SWOOP_KEEP, SWOOP_MIN_DY = 900, 1.08, -200
+FRENZY_COIN_MULT = 2.0
+
+# ---------------------------------------------------------------- gear (Core/Gear.swift)
+# Only the fields a part actually changes; everything else defaults to a no-op.
+GEAR = {
+    'wheels':         dict(slot='hull',    plow_mult=0.35),
+    'pontoons':       dict(slot='hull',    skip_angle_bonus=14, drag_mult=1.06),
+    'springKeel':     dict(slot='hull',    rest_mult=1.26),
+    'stormSail':      dict(slot='rig',     sail=32, storm_forward=True),
+    'boxKite':        dict(slot='rig',     grav_mult=0.84),
+    'jetVent':        dict(slot='rig',     rocket_mult=1.15, bonus_rockets=1),
+    'coinMagnet':     dict(slot='trinket', magnet=600),
+    'luckyHorseshoe': dict(slot='trinket', boost_mult=2.0, arc_bonus=0.28),
+    'barnaclePlate':  dict(slot='trinket', launch_mult=0.96, damage_mult=0.5),
+}
+
+# ---------------------------------------------------------------- launchers
+# (aim_mode, angle_lo, angle_hi, min_power, speed_mult, muzzle_y, sweet, sweet_hw,
+#  sweet_bonus, skip_angle_bonus, hard_impact_bonus)
+LAUNCHERS = {
+    'cannon':    ('twoSweep',   15, 75, 0.45, 1.00, 60, 0.00, 0.00, 1.00, 0, 0),
+    'rodReel':   ('castTiming', 25, 65, 0.40, 0.95, 74, 0.82, 0.11, 1.28, 0, 0),
+    'slingshot': ('charge',     20, 70, 0.30, 1.18, 52, 0.00, 0.00, 1.00, 0, 0),
+    'torpedo':   ('twoSweep',    6, 28, 0.60, 1.12, 34, 0.00, 0.00, 1.00, 8, 600),
+}
+
+PRESTIGE_COIN_PER_LEVEL = 0.25
+
+# ---------------------------------------------------------------- daily modifiers
+DAILY = {
+    'doubleCoins':   dict(coin=2.0),
+    'glassHull':     dict(coin=1.6, hull=0.4),
+    'noRockets':     dict(coin=2.6, rockets=-99),
+    'headwind':      dict(coin=2.0, drag=1.8, launch=1.1),
+    'squally':       dict(coin=1.5, haz_bonus=0.18),
+    'featherweight': dict(grav=0.7, launch=0.85),
+    'rocketRush':    dict(rockets=3, drag=1.5),
+    'ironFish':      dict(coin=1.3, launch=0.9, damage=0.4),
+}
+
+
+def resolve(tiers, crew='marlow', gear=(), prestige=0, daily=None, launcher='cannon'):
+    """Mirror of UpgradeConfig.init — the five layers, in the same order."""
+    L, H, R, A, U = tiers
+    lspec = LAUNCHERS[launcher]
+    l_skip_bonus, l_hard_bonus = lspec[9], lspec[10]
+    lm, hm, dm, rb, br, cm_, dmg, cdm, ability = CREW[crew]
+    d = DAILY.get(daily, {})
+
+    speed      = LAUNCH_SPEED[L] * lm
+    hull       = HULL_MAX[H] * hm
+    retention  = SKIP_H_RET[H] + rb
+    rockets    = ROCKET_COUNT[R] + br
+    rocket_str = ROCKET_STR[R]
+    drag       = AIR_DRAG[A] * dm
+    boost_mult = LURE_BOOST[U]
+
+    grav, plow, skip_angle_bonus = 1.0, PLOW_DRAG, float(l_skip_bonus)
+    rest, sail, magnet = SKIP_V_REST, 0.0, 0.0
+    arc_chance, coin_mult, damage = COIN_ARC_CHANCE, cm_, dmg
+    storm_forward = False
+
+    for g in gear:
+        m = GEAR[g]
+        plow *= m.get('plow_mult', 1)
+        skip_angle_bonus += m.get('skip_angle_bonus', 0)
+        rest *= m.get('rest_mult', 1)
+        drag *= m.get('drag_mult', 1)
+        grav *= m.get('grav_mult', 1)
+        speed *= m.get('launch_mult', 1)
+        rocket_str *= m.get('rocket_mult', 1)
+        rockets += m.get('bonus_rockets', 0)
+        sail += m.get('sail', 0)
+        storm_forward = storm_forward or m.get('storm_forward', False)
+        magnet = max(magnet, m.get('magnet', 0))
+        boost_mult *= m.get('boost_mult', 1)
+        arc_chance += m.get('arc_bonus', 0)
+        damage *= m.get('damage_mult', 1)
+
+    coin_mult *= 1 + prestige * PRESTIGE_COIN_PER_LEVEL
+
+    speed   *= d.get('launch', 1)
+    hull    *= d.get('hull', 1)
+    drag    *= d.get('drag', 1)
+    grav    *= d.get('grav', 1)
+    rockets += d.get('rockets', 0)
+    coin_mult *= d.get('coin', 1)
+    damage  *= d.get('damage', 1)
+    sail    += d.get('sail', 0)
+
+    if rocket_str <= 0 and rockets > 0:
+        rocket_str = ROCKET_STR[1]
+
+    return dict(
+        speed=speed, hull=max(1, hull), retention=min(retention, SKIP_RET_CEIL),
+        hard_t=HARD_IMPACT_T[H] + l_hard_bonus, rockets=max(0, rockets), rocket_str=rocket_str,
+        drag=max(0, drag), grav=grav, plow=plow, sail=sail, storm_forward=storm_forward,
+        skip_max=SKIP_MAX_ANGLE + math.radians(skip_angle_bonus),
+        dive_max=DIVE_MAX_ANGLE + math.radians(skip_angle_bonus),
+        rest=min(rest, SKIP_REST_CEIL), boost_mult=boost_mult,
+        arc_chance=min(max(arc_chance, 0), 0.8), coin_mult=coin_mult, damage=damage,
+        magnet=magnet, haz_bonus=d.get('haz_bonus', 0),
+        ability=ability, ab_cd=max(AB_MIN_CD, ABILITY[ability][1] * cdm),
+        ab_dur=ABILITY[ability][0], launcher=launcher,
+    )
+
+
 BOOSTS = {
     'buoy':    dict(w=30, y=(0, 0), r=28,  ),
     'whale':   dict(w=12, y=(0, 0), r=40),
@@ -85,17 +229,35 @@ def pick(table, metres=1e9):
         if r <= 0: return k
     return k
 
-def run(tiers, player_skill=0.6, verbose=False):
-    L, H, R, A, U = tiers
-    v = LAUNCH_SPEED[L]
-    ang = math.radians(random.uniform(38, 52))   # decent player aims ~45
-    power = random.uniform(0.75, 1.0)             # meter lock quality
-    vx, vy = v*power*math.cos(ang), v*power*math.sin(ang)
-    x, y = 0.0, 60.0
-    hull = HULL_MAX[H]
-    rockets = ROCKET_COUNT[R]
-    drag = AIR_DRAG[A]
-    boost_mult = LURE_BOOST[U]
+def run(tiers, player_skill=0.6, crew='marlow', gear=(), prestige=0, daily=None,
+        launcher='cannon', verbose=False):
+    c = resolve(tiers, crew, gear, prestige, daily, launcher)
+    mode, a_lo, a_hi, min_pow, spd_mult, muzzle_y, sweet, sweet_hw, sweet_bonus, _sab, _hib = LAUNCHERS[launcher]
+
+    # --- aim: a decent player lands near the middle of the angle band, and hits the timing
+    # window `player_skill` of the time.
+    mid = (a_lo + a_hi) / 2
+    span = (a_hi - a_lo) / 2
+    ang = math.radians(min(max(random.gauss(mid, span * 0.28), a_lo), a_hi))
+    if mode == 'castTiming':
+        hit = random.random() < player_skill
+        power = random.uniform(sweet - sweet_hw, sweet + sweet_hw) if hit else random.uniform(0.3, 1.0)
+        spd_mult *= sweet_bonus if hit else 1.0
+    elif mode == 'charge':
+        # Held to near-full most of the time; a bad read lets the band snap.
+        if random.random() < player_skill:
+            power = random.uniform(0.85, 1.0)
+        else:
+            power = 0.30 if random.random() < 0.5 else random.uniform(0.4, 0.8)
+    else:
+        power = random.uniform(0.75, 1.0)
+
+    v = c['speed'] * spd_mult * (min_pow + (1 - min_pow) * power)
+    vx, vy = v * math.cos(ang), v * math.sin(ang)
+    x, y = 0.0, float(muzzle_y)
+
+    hull = c['hull']
+    rockets = c['rockets']
     coins = 0
     state = 'fly'
     t = 0.0
@@ -105,7 +267,6 @@ def run(tiers, player_skill=0.6, verbose=False):
     skips = 0
     hazards_hit = 0
     zone = None
-    flight_time = 0
     max_flight = 0
     cur_flight = 0
     combo = 0
@@ -114,136 +275,251 @@ def run(tiers, player_skill=0.6, verbose=False):
     stun = 0.0
     floating = 0.0
     last_water_haz = False
+    # ability state
+    ab_cd = 0.0
+    ab_active = 0.0
+    ab_uses = 0
+    shields = 0
+    slam_armed = False
+
+    def pay(n):
+        m = c['coin_mult'] * (FRENZY_COIN_MULT if (c['ability'] == 'frenzy' and ab_active > 0) else 1)
+        return max(n, int(round(n * m)))
+
     while True:
-        # spawn ahead
+        # ---- spawn ahead
         while next_spawn < x + 6000:
-            d_m = next_spawn/PPM
-            haz_frac = BASE_HAZ_FRAC + (HAZ_FRAC_AT_5000-BASE_HAZ_FRAC)*min(1, d_m/5000)
-            if last_water_haz: haz_frac *= HAZ_REPEAT_PENALTY
-            # lure increases boost share
-            bw = (1-haz_frac)*boost_mult
-            density = 1.0 + min(1.0, d_m/4000)*0.6
-            if random.random() < bw/(bw+haz_frac):
-                if random.random() < COIN_ARC_CHANCE:
+            d_m = next_spawn / PPM
+            haz_frac = BASE_HAZ_FRAC + (HAZ_FRAC_AT_5000 - BASE_HAZ_FRAC) * min(1, d_m / 5000)
+            haz_frac = min(max(haz_frac + c['haz_bonus'], 0), 0.85)
+            if last_water_haz:
+                haz_frac *= HAZ_REPEAT_PENALTY
+            bw = (1 - haz_frac) * c['boost_mult']
+            density = 1.0 + min(1.0, d_m / 4000) * 0.6
+            if random.random() < bw / (bw + haz_frac):
+                if random.random() < c['arc_chance']:
                     n = random.randint(*COIN_ARC_COUNT)
                     peak = random.uniform(*COIN_ARC_HEIGHT)
-                    rise = COIN_ARC_RISE*random.uniform(0.5, 1.2)
+                    rise = COIN_ARC_RISE * random.uniform(0.5, 1.2)
                     for i in range(n):
-                        u = i/max(n-1, 1); curve = 1-((u-0.5)*2)**2
-                        ents.append([next_spawn + i*COIN_ARC_SPACING, max(peak-rise+rise*curve, 30), 20, 'coin', False, False])
-                    next_spawn += n*COIN_ARC_SPACING
+                        u = i / max(n - 1, 1)
+                        curve = 1 - ((u - 0.5) * 2) ** 2
+                        ents.append([next_spawn + i * COIN_ARC_SPACING,
+                                     max(peak - rise + rise * curve, 30), 20, 'coin', False, False])
+                    next_spawn += n * COIN_ARC_SPACING
                     last_water_haz = False
-                    next_spawn += random.uniform(*SPAWN_INTERVAL_M)*PPM/density
+                    next_spawn += random.uniform(*SPAWN_INTERVAL_M) * PPM / density
                     continue
                 k = pick(BOOSTS, d_m); spec = BOOSTS[k]; is_h = False
             else:
                 k = pick(HAZ, d_m); spec = HAZ[k]; is_h = True
             last_water_haz = k in WATER_HAZ
-            ey = random.uniform(*spec['y'])
-            ents.append([next_spawn, ey, spec['r'], k, is_h, False])
-            next_spawn += random.uniform(*SPAWN_INTERVAL_M)*PPM/density
-        stun = max(0.0, stun-DT); floating = max(0.0, floating-DT)
-        # rocket usage: fire when airborne and rising slowly / at apex
+            ents.append([next_spawn, random.uniform(*spec['y']), spec['r'], k, is_h, False])
+            next_spawn += random.uniform(*SPAWN_INTERVAL_M) * PPM / density
+
+        stun = max(0.0, stun - DT)
+        floating = max(0.0, floating - DT)
+        ab_cd = max(0.0, ab_cd - DT)
+        ab_active = max(0.0, ab_active - DT)
+
+        # ---- ability: fire it whenever it is ready and it would actually help
+        if state == 'fly' and ab_cd <= 0 and stun <= 0 and random.random() < player_skill:
+            a = c['ability']
+            want = False
+            if a in ('tuck', 'glide'):        want = vy < 200                 # on the way down / at apex
+            elif a == 'puff':                 want = y < 260 and vy < 0       # about to land
+            elif a == 'slam':                 want = vy < 0 and 150 < y < 700 and vx > 400
+            elif a == 'inkjet':               want = abs(vy) < 260
+            elif a == 'shell':                want = shields == 0
+            elif a == 'swoop':                want = any(0 < e[0] - x < SWOOP_RANGE and e[1] - y > SWOOP_MIN_DY and not e[5] and not e[4] for e in ents)
+            elif a == 'frenzy':               want = True
+            if want:
+                ab_cd = c['ab_cd']
+                ab_uses += 1
+                if c['ab_dur'] > 0:
+                    ab_active = c['ab_dur']
+                if a == 'shell':
+                    shields += SHELL_CHARGES
+                elif a == 'inkjet':
+                    vx += INKJET_FWD; vy += INKJET_UP
+                elif a == 'slam':
+                    vy = -max(SLAM_DOWN, -vy); slam_armed = True
+                elif a == 'swoop':
+                    targets = [e for e in ents if 0 < e[0] - x < SWOOP_RANGE and e[1] - y > SWOOP_MIN_DY and not e[5] and not e[4]]
+                    if targets:
+                        tgt = min(targets, key=lambda e: (e[0] - x) ** 2 + (e[1] - y) ** 2)
+                        dx, dy = tgt[0] - x, tgt[1] - y
+                        length = math.hypot(dx, dy) or 1
+                        sp = math.hypot(vx, vy) * SWOOP_KEEP
+                        vx, vy = dx / length * sp, dy / length * sp
+
+        # ---- rockets: fire near the apex
         if state == 'fly' and rockets > 0 and stun <= 0 and abs(vy) < 120 and vx > 0 and random.random() < player_skill:
             rockets -= 1
-            vx += ROCKET_STR[R]
-            vy += ROCKET_STR[R]*0.18
-        # dive: skilled player dives on descent
+            vx += c['rocket_str']
+            vy += c['rocket_str'] * 0.18
+
         diving = state == 'fly' and stun <= 0 and vy < -150 and random.random() < player_skill
+
         if state == 'fly':
             gm = DIVE_GRAV_MULT if diving else 1.0
-            if floating > 0: gm *= BALLOON_G
-            vy += G*gm*DT
-            # zone effects
-            if zone == 'birds': vy += 380*DT; vx += 120*DT
-            elif zone == 'cloud': vy -= 700*DT
-            f = max(0.0, 1 - drag*DT)
+            if floating > 0:
+                gm *= BALLOON_G
+            gm *= c['grav']
+            drag_rate = c['drag']
+            if ab_active > 0 and c['ability'] == 'tuck':
+                drag_rate *= TUCK_DRAG_MULT
+                vx += TUCK_PUSH * DT
+            if ab_active > 0 and c['ability'] == 'glide':
+                gm *= GLIDE_G_MULT
+                vx += GLIDE_PUSH * DT
+            vy += G * gm * DT
+            vx += c['sail'] * DT
+            if zone == 'birds':
+                vy += 380 * DT; vx += 120 * DT
+            elif zone == 'cloud':
+                if c['storm_forward']:
+                    vx += 700 * DT
+                else:
+                    vy -= 700 * DT
+            f = max(0.0, 1 - drag_rate * DT)
             if zone == 'whirl':
-                vy -= WHIRL_PULL*DT
-                f *= max(0.0, 1 - WHIRL_DRAG*DT)
+                vy -= WHIRL_PULL * DT
+                f *= max(0.0, 1 - WHIRL_DRAG * DT)
             vx *= f; vy *= f
-            x += vx*DT; y += vy*DT
+            x += vx * DT; y += vy * DT
             cur_flight += DT
+
             if y <= WATER_Y:
                 ang_i = math.atan2(-vy, max(vx, 1))
-                max_a = DIVE_MAX_ANGLE if diving else SKIP_MAX_ANGLE
+                max_a = c['dive_max'] if diving else c['skip_max']
                 spd = math.hypot(vx, vy)
-                if -vy > SKIP_MIN_VY and ang_i < max_a and vx > END_SPEED*2:
-                    rest = SKIP_V_REST*(DIVE_REST_BONUS if diving else 1.0)
+                slammed = slam_armed
+                slam_armed = False
+                forced = slammed or (ab_active > 0 and c['ability'] == 'puff')
+                natural = -vy > SKIP_MIN_VY and ang_i < max_a and vx > SKIP_MIN_VY
+                if natural or (forced and vx > SKIP_MIN_VY):
+                    rest = c['rest']
+                    if diving: rest *= DIVE_REST_BONUS
+                    if ab_active > 0 and c['ability'] == 'puff': rest *= PUFF_REST_MULT
+                    if slammed: rest *= SLAM_REST_MULT
+                    rest = min(rest, SKIP_REST_CEIL)
                     perfect = ang_i < PERFECT_ANGLE
-                    vy = -vy*rest
-                    vx *= SKIP_H_RET[H]*(PERFECT_SPEED_BONUS if perfect else 1.0)
+                    bounce = -vy * rest
+                    if forced and not natural:
+                        bounce = max(bounce, FORCED_SKIP_MIN_BOUNCE)
+                    vy = bounce
+                    ret = c['retention'] * (PERFECT_SPEED_BONUS if perfect else 1.0)
+                    if slammed: ret *= SLAM_FWD_BONUS
+                    vx *= min(ret, SKIP_RET_CEIL)
                     y = WATER_Y
                     skips += 1; combo += 1; best_combo = max(best_combo, combo)
-                    coins += COMBO_COIN_STEP*combo
-                    if perfect: perfects += 1; coins += PERFECT_COINS
-                    if spd > HARD_IMPACT_T[H]:
-                        hull -= HARD_DMG_PER_100*(spd-HARD_IMPACT_T[H])/100
+                    coins += pay(COMBO_COIN_STEP * combo)
+                    if perfect:
+                        perfects += 1
+                        coins += pay(PERFECT_COINS)
+                    if spd > c['hard_t']:
+                        hull -= HARD_DMG_PER_100 * (spd - c['hard_t']) / 100 * c['damage']
                 else:
                     state = 'plow'; y = WATER_Y; vy = 0; combo = 0
-                    if spd > HARD_IMPACT_T[H]:
-                        hull -= HARD_DMG_PER_100*(spd-HARD_IMPACT_T[H])/100
+                    if spd > c['hard_t']:
+                        hull -= HARD_DMG_PER_100 * (spd - c['hard_t']) / 100 * c['damage']
                 max_flight = max(max_flight, cur_flight); cur_flight = 0
         else:
-            vx *= math.exp(-PLOW_DRAG*DT)
-            if zone == 'whirl': vx *= math.exp(-WHIRL_DRAG*3*DT)
-            x += vx*DT
-            if vx < END_SPEED: break
-        if hull <= 0: break
-        # entities
+            vx *= math.exp(-c['plow'] * DT)
+            if zone == 'whirl':
+                vx *= math.exp(-WHIRL_DRAG * 3 * DT)
+            x += vx * DT
+            if vx < END_SPEED:
+                break
+
+        if hull <= 0:
+            break
+
+        # ---- entities
         zone = None
+        frenzied = ab_active > 0 and c['ability'] == 'frenzy'
         for e in ents:
             ex, ey, er, k, is_h, used = e
-            if used and k not in ZONES: continue
-            if abs(ex-x) < er and abs(ey-y) < er:
+            if used and k not in ZONES:
+                continue
+            # Coin Magnet drags nearby arc coins in.
+            if k == 'coin' and not used and c['magnet'] > 0:
+                if math.hypot(ex - x, ey - y) <= c['magnet']:
+                    step = min(900 * DT, math.hypot(ex - x, ey - y))
+                    d0 = math.hypot(ex - x, ey - y) or 1
+                    e[0] += (x - ex) / d0 * step
+                    e[1] += (y - ey) / d0 * step
+                    ex, ey = e[0], e[1]
+            if abs(ex - x) < er and abs(ey - y) < er:
                 if k in ZONES:
-                    zone = k; continue
+                    zone = k
+                    continue
+                if is_h and shields > 0:      # Tock's shell soaks the whole hazard
+                    shields -= 1
+                    e[5] = True
+                    continue
                 e[5] = True
                 if k == 'buoy':
                     if vy < 0 or state == 'plow':
-                        vy = max(abs(vy)*0.5, 0) + 520; state = 'fly'; y = WATER_Y+1
+                        vy = max(abs(vy) * 0.5, 0) + 520; state = 'fly'; y = WATER_Y + 1
                 elif k == 'whale':
-                    vy = 950; vx += 80; state = 'fly'; y = WATER_Y+1
+                    vy = 950; vx += 80; state = 'fly'; y = WATER_Y + 1
                 elif k == 'motor':
                     vx += 480
                 elif k == 'coins':
-                    coins += 40
+                    coins += pay(40)
                 elif k == 'fuel':
-                    coins += 25
+                    coins += pay(25)
                 elif k == 'coin':
-                    coins += COIN_VALUE
+                    coins += pay(COIN_VALUE)
                 elif k == 'dolphin':
-                    vy = max(vy, 0)*0.3 + DOLPHIN_UP; vx += DOLPHIN_FWD; state = 'fly'; y = WATER_Y+1
+                    vy = max(vy, 0) * 0.3 + DOLPHIN_UP; vx += DOLPHIN_FWD; state = 'fly'; y = WATER_Y + 1
                 elif k == 'balloon':
                     vy += BALLOON_LIFT; floating = BALLOON_SEC
                 elif k == 'mine':
-                    vx *= MINE_SPEED; vy = max(vy, 0) + MINE_UP; hull -= MINE_DMG; hazards_hit += 1; state = 'fly'; y = WATER_Y+1
+                    if not frenzied: vx *= MINE_SPEED
+                    vy = max(vy, 0) + MINE_UP; hull -= MINE_DMG * c['damage']; hazards_hit += 1
+                    state = 'fly'; y = WATER_Y + 1
                 elif k == 'jelly':
-                    vy *= JELLY_VY; hull -= JELLY_DMG; stun = JELLY_STUN; hazards_hit += 1
+                    if not frenzied: vy *= JELLY_VY
+                    hull -= JELLY_DMG * c['damage']; stun = JELLY_STUN; hazards_hit += 1
                 elif k == 'rock':
-                    vx *= 0.6; hull -= 25; hazards_hit += 1
+                    if not frenzied: vx *= 0.6
+                    hull -= 25 * c['damage']; hazards_hit += 1
                 elif k == 'net':
-                    vx *= 0.45; vy *= 0.5; hazards_hit += 1
+                    if not frenzied: vx *= 0.45; vy *= 0.5
+                    hazards_hit += 1
                 elif k == 'shark':
-                    vx *= 0.75; vy = max(vy, 0) + 200; hull -= 20; hazards_hit += 1; state = 'fly'
+                    if not frenzied: vx *= 0.75
+                    vy = max(vy, 0) + 200; hull -= 20 * c['damage']; hazards_hit += 1; state = 'fly'
         t += DT
-        if t > 600: break
-    dist_m = x/PPM
-    coins += int(dist_m)
-    return dict(dist=dist_m, coins=coins, t=t, skips=skips, hull=hull, hits=hazards_hit, maxflight=max_flight,
-                combo=best_combo, perfects=perfects)
+        if t > 600:
+            break
 
-def batch(tiers, n=300, skill=0.6, label=''):
-    rs = [run(tiers, skill) for _ in range(n)]
-    d = [r['dist'] for r in rs]
-    d.sort()
-    print(f"{label:28s} tiers={tiers} skill={skill}: median={statistics.median(d):6.0f}m  p10={d[int(n*0.1)]:6.0f}  p90={d[int(n*0.9)]:6.0f}  "
-          f"coins~{statistics.median(r['coins'] for r in rs):5.0f}  skips~{statistics.mean(r['skips'] for r in rs):4.1f}  combo~{statistics.mean(r['combo'] for r in rs):3.1f}  "
-          f"perf~{statistics.mean(r['perfects'] for r in rs):3.1f}  t~{statistics.mean(r['t'] for r in rs):4.1f}s sunk={sum(1 for r in rs if r['hull']<=0)}")
+    dist_m = x / PPM
+    coins += pay(int(dist_m))
+    return dict(dist=dist_m, coins=coins, t=t, skips=skips, hull=hull, hits=hazards_hit,
+                maxflight=max_flight, combo=best_combo, perfects=perfects, abilities=ab_uses)
+
+
+def batch(tiers, n=300, skill=0.6, label='', **kw):
+    rs = [run(tiers, skill, **kw) for _ in range(n)]
+    d = sorted(r['dist'] for r in rs)
+    print(f"{label:30s} tiers={tiers} skill={skill}: median={statistics.median(d):6.0f}m  "
+          f"p10={d[int(n*0.1)]:6.0f}  p90={d[int(n*0.9)]:6.0f}  "
+          f"coins~{statistics.median(r['coins'] for r in rs):6.0f}  "
+          f"skips~{statistics.mean(r['skips'] for r in rs):4.1f}  "
+          f"combo~{statistics.mean(r['combo'] for r in rs):3.1f}  "
+          f"perf~{statistics.mean(r['perfects'] for r in rs):3.1f}  "
+          f"ab~{statistics.mean(r['abilities'] for r in rs):4.1f}  "
+          f"t~{statistics.mean(r['t'] for r in rs):4.1f}s sunk={sum(1 for r in rs if r['hull']<=0)}")
     return statistics.median(d)
+
 
 if __name__ == '__main__':
     random.seed(7)
+    print("=== Core progression (Marlow, cannon, no gear) " + "=" * 34)
     batch((0,0,0,0,0), skill=0.3, label='Run 1-3 (fresh, clumsy)')
     batch((0,0,0,0,0), skill=0.6, label='Fresh, decent')
     batch((1,0,0,0,0), skill=0.6, label='Launcher 1')
@@ -252,7 +528,40 @@ if __name__ == '__main__':
     batch((3,2,2,2,1), skill=0.6, label='Mid-late')
     batch((5,5,5,5,5), skill=0.6, label='Max, decent')
     batch((5,5,5,5,5), skill=0.9, label='Max, skilled')
-    # economy: greedy buy cheapest-useful upgrade after each run
+
+    print()
+    print("=== Riders (mid-late tiers, cannon, no gear) " + "=" * 36)
+    for name in CREW:
+        batch((3,2,2,2,1), skill=0.6, crew=name, label=f'{name} ({CREW[name][8]})')
+
+    print()
+    print("=== Gear, one part at a time (mid-late, Marlow) " + "=" * 33)
+    batch((3,2,2,2,1), skill=0.6, label='no gear')
+    for g in GEAR:
+        batch((3,2,2,2,1), skill=0.6, gear=(g,), label=g)
+    batch((3,2,2,2,1), skill=0.6, gear=('wheels','boxKite','luckyHorseshoe'), label='distance build')
+    batch((3,2,2,2,1), skill=0.6, gear=('springKeel','jetVent','coinMagnet'), label='coin build')
+
+    print()
+    print("=== Launchers (mid-late, Marlow, no gear) " + "=" * 39)
+    for lk in LAUNCHERS:
+        batch((3,2,2,2,1), skill=0.6, launcher=lk, label=lk)
+        batch((3,2,2,2,1), skill=0.9, launcher=lk, label=lk + ' (skilled)')
+
+    print()
+    print("=== Daily modifiers (mid-late, Marlow, no gear) " + "=" * 33)
+    for dm in DAILY:
+        batch((3,2,2,2,1), skill=0.6, daily=dm, label=dm)
+
+    print()
+    print("=== End game " + "=" * 68)
+    batch((5,5,5,5,5), skill=0.9, crew='chum', gear=('wheels','boxKite','luckyHorseshoe'),
+          launcher='torpedo', label='max + best distance build')
+    batch((5,5,5,5,5), skill=0.9, crew='pip', gear=('springKeel','jetVent','coinMagnet'),
+          prestige=3, launcher='rodReel', label='max + coin build + prestige 3')
+
+    print()
+    print("=== Coin economy: greedy buyer, 15 runs " + "=" * 41)
     PRICES = {'L':260,'H':200,'R':320,'A':360,'U':220}
     order = ['L','H','R','L','A','U','H','R','L','A','H','R','L','A','U','L','H','R','A','U','H','R','A','U','U']
     tiers = {'L':0,'H':0,'R':0,'A':0,'U':0}
@@ -266,5 +575,17 @@ if __name__ == '__main__':
             if coins >= price and tiers[k] < 5:
                 coins -= price; tiers[k]+=1; bought.append(f"{k}{tiers[k]}({price})"); qi += 1
             else: break
-        print(f"run {run_i:2d}: {r['dist']:5.0f}m  coins after shop={coins:5d}  tiers={tiers}  bought={bought}")
+        print(f"run {run_i:2d}: {r['dist']:5.0f}m  coins after shop={coins:6d}  tiers={tiers}  bought={bought}")
 
+    print()
+    print("=== Locker affordability: how many runs to buy each unlock " + "=" * 22)
+    # Median coins per run at the tier the player is likely to be on when shopping for it.
+    for label, price, t in [('Bristle (900)', 900, (1,1,1,0,0)),
+                            ('Nixie (1600)', 1600, (2,1,1,1,1)),
+                            ('Beach Wheels (1200)', 1200, (1,1,1,0,0)),
+                            ('Rod & Reel (5000)', 5000, (3,2,2,2,1)),
+                            ('Chum (8000)', 8000, (4,3,3,3,2)),
+                            ('Slingshot (9000)', 9000, (4,3,3,3,2)),
+                            ('Torpedo (14000)', 14000, (5,5,5,5,5))]:
+        per = statistics.median(run(t, 0.6)['coins'] for _ in range(120))
+        print(f"  {label:24s} ~{per:5.0f} coins/run at tiers {t} -> {price/per:4.1f} runs")
