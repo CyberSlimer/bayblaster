@@ -578,14 +578,28 @@ if __name__ == '__main__':
         print(f"run {run_i:2d}: {r['dist']:5.0f}m  coins after shop={coins:6d}  tiers={tiers}  bought={bought}")
 
     print()
-    print("=== Locker affordability: how many runs to buy each unlock " + "=" * 22)
-    # Median coins per run at the tier the player is likely to be on when shopping for it.
-    for label, price, t in [('Bristle (900)', 900, (1,1,1,0,0)),
-                            ('Nixie (1600)', 1600, (2,1,1,1,1)),
-                            ('Beach Wheels (1200)', 1200, (1,1,1,0,0)),
-                            ('Rod & Reel (5000)', 5000, (3,2,2,2,1)),
-                            ('Chum (8000)', 8000, (4,3,3,3,2)),
-                            ('Slingshot (9000)', 9000, (4,3,3,3,2)),
-                            ('Torpedo (14000)', 14000, (5,5,5,5,5))]:
-        per = statistics.median(run(t, 0.6)['coins'] for _ in range(120))
-        print(f"  {label:24s} ~{per:5.0f} coins/run at tiers {t} -> {price/per:4.1f} runs")
+    print("=== Locker affordability: runs of saving per unlock " + "=" * 26)
+    # The locker is the long tail *after* the five shop tracks max out, so nothing here
+    # should be affordable in a run or two at the tier you first want it.
+    rates = {}
+    for label, t in [('early', (1,1,1,0,0)), ('mid', (2,1,1,1,1)),
+                     ('mid-late', (3,2,2,2,1)), ('max', (5,5,5,5,5))]:
+        rates[label] = statistics.median(run(t, 0.6)['coins'] for _ in range(80))
+        print(f"  coins/run at {label:9s} tiers {t}: {rates[label]:6.0f}")
+    print()
+    LOCKER = [
+        ('Bristle', 2_500, 'early'), ('Beach Wheels', 3_000, 'early'),
+        ('Coin Magnet', 3_500, 'mid'), ('Pontoons', 4_500, 'mid'), ('Bruno', 5_500, 'mid'),
+        ('Storm Sail', 6_000, 'mid-late'), ('Barnacle Plating', 7_000, 'mid-late'),
+        ('Pip', 8_000, 'mid-late'), ('Box Kite', 9_000, 'mid-late'),
+        ('Spring Keel', 11_000, 'mid-late'), ('Tock', 11_000, 'mid-late'),
+        ('Lucky Horseshoe', 13_000, 'mid-late'), ('Jet Vent', 16_000, 'mid-late'),
+        ('Chum', 17_000, 'mid-late'), ('Rod & Reel', 22_000, 'mid-late'),
+        ('Gilly', 24_000, 'max'), ('Nixie', 32_000, 'max'),
+        ('Tidal Slingshot', 40_000, 'max'), ('Torpedo Tube', 65_000, 'max'),
+    ]
+    total = 0
+    for name, price, stage in LOCKER:
+        total += price
+        print(f"  {name:18s} {price:6,d}  ->  {price / rates[stage]:5.1f} runs at the {stage} rate")
+    print(f"\n  whole locker: {total:,} coins (missions, trophies and the daily pay on top)")

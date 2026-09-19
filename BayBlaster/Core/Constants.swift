@@ -165,11 +165,15 @@ enum Tuning {
     static let crewChumDragMultiplier: CGFloat = 0.80         // Chum the baby shark: slippery…
     static let crewChumLaunchMultiplier: CGFloat = 1.20       // …fast…
     static let crewChumHullMultiplier: CGFloat = 0.85         // …and fragile
-    // Priced against the measured power ladder in HANDOFF.md, not against flavour: Pip is
-    // deliberately cheap because buying the coin rider early speeds up everything after it.
+    // Ordered by the measured power ladder in HANDOFF.md, not by flavour — Pip sits early
+    // because buying the coin rider speeds up everything after it.
+    //
+    // The absolute numbers come from the coins-per-run figures sim.py prints: the five shop
+    // tracks max out in ~15 runs, and the locker is deliberately the long tail *after* that,
+    // so nothing here should be affordable in one or two runs at the tier you first want it.
     static let crewPrices: [CrewMember: Int] = [
-        .marlow: 0, .bristle: 800, .bruno: 1800, .pip: 2600,
-        .tock: 3000, .chum: 5200, .gilly: 6500, .nixie: 8000
+        .marlow: 0, .bristle: 2_500, .bruno: 5_500, .pip: 8_000,
+        .tock: 11_000, .chum: 17_000, .gilly: 24_000, .nixie: 32_000
     ]
 
     // MARK: - Abilities (the third in-flight verb; HUD button)
@@ -225,10 +229,11 @@ enum Tuning {
     static let gearHorseshoeCoinArcBonus: CGFloat = 0.28      // added to coinArcChance
     static let gearBarnacleLaunchMultiplier: CGFloat = 0.96
     static let gearBarnacleDamageMultiplier: CGFloat = 0.5
+    // Cheapest first within a slot, and priced against how much each part measured at.
     static let gearPrices: [GearItem: Int] = [
-        .wheels: 1200, .pontoons: 1500, .springKeel: 2600,
-        .stormSail: 1800, .boxKite: 2200, .jetVent: 3200,
-        .coinMagnet: 1400, .luckyHorseshoe: 2800, .barnaclePlate: 2000
+        .wheels: 3_000, .pontoons: 4_500, .springKeel: 11_000,
+        .stormSail: 6_000, .boxKite: 9_000, .jetVent: 16_000,
+        .coinMagnet: 3_500, .luckyHorseshoe: 13_000, .barnaclePlate: 7_000
     ]
 
     // MARK: - Launchers (Core/Launchers.swift)
@@ -269,8 +274,10 @@ enum Tuning {
     static let torpedoBarrelLength: CGFloat = 84
     static let torpedoSkipAngleBonus: CGFloat = 8             // it is shaped to skim, so the window is wider…
     static let torpedoHardImpactBonus: CGFloat = 600          // …and the casing takes a flat landing that would hole the dinghy
+    // The big-ticket items: a new launcher changes how every run *starts*, so each one is
+    // meant to be a goal you save toward for a while rather than an incidental purchase.
     static let launcherPrices: [LauncherKind: Int] = [
-        .cannon: 0, .rodReel: 5000, .slingshot: 9000, .torpedo: 14000
+        .cannon: 0, .rodReel: 22_000, .slingshot: 40_000, .torpedo: 65_000
     ]
 
     // MARK: - Loadout ceilings

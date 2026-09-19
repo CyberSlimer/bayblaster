@@ -30,25 +30,25 @@ Each brings a **passive perk** and an **in-flight ability** fired from a new HUD
 | Rider | Price | Perk | Ability |
 |---|---|---|---|
 | Marlow the mackerel | free | ability cooldown −20% | **Tuck** — drag almost vanishes for 1.2 s |
-| Bristle the pufferfish | 800 | hull +35%, drag −12% | **Puff up** — every landing skips while inflated |
-| Bruno the sea otter | 1,800 | skips keep +4.5%, drag −12% | **Belly slam** — slam down; the landing becomes a huge skip |
-| Pip the seagull | 2,600 | coins ×1.7 | **Swoop** — snap your flight at the next pickup |
-| Tock the hermit crab | 3,000 | damage −50%, hull +25%, drag −20% | **Shell up** — soaks the next two hazards whole |
-| Chum the baby shark | 5,200 | launch +20%, drag −20%, hull −15% | **Frenzy** — double coins, hazards stop slowing you |
-| Gilly the squid | 6,500 | +1 rocket | **Ink jet** — a short forward jet on a short cooldown |
-| Nixie the flying fish | 8,000 | drag −32% | **Glide** — wings out, barely any gravity |
+| Bristle the pufferfish | 2,500 | hull +35%, drag −12% | **Puff up** — every landing skips while inflated |
+| Bruno the sea otter | 5,500 | skips keep +4.5%, drag −12% | **Belly slam** — slam down; the landing becomes a huge skip |
+| Pip the seagull | 8,000 | coins ×1.7 | **Swoop** — snap your flight at the next pickup |
+| Tock the hermit crab | 11,000 | damage −50%, hull +25%, drag −20% | **Shell up** — soaks the next two hazards whole |
+| Chum the baby shark | 17,000 | launch +20%, drag −20%, hull −15% | **Frenzy** — double coins, hazards stop slowing you |
+| Gilly the squid | 24,000 | +1 rocket | **Ink jet** — a short forward jet on a short cooldown |
+| Nixie the flying fish | 32,000 | drag −32% | **Glide** — wings out, barely any gravity |
 
 ### 2. Gear (`Core/Gear.swift`) — 9 parts, 3 slots, one part per slot
 
 Bought once, then equipped/unequipped freely. Every part is a trade, and every part is
 visible on the boat (`Player.addGearArt`).
 
-- **Hull**: Beach Wheels (roll on after splashdown), Pontoons (+14° skip window, +6% drag),
-  Spring Keel (+26% bounce)
-- **Rig**: Storm Sail (constant push; squalls blow you along instead of down), Box Kite
-  (−16% gravity), Jet Vent (+15% rockets and +1)
-- **Trinket**: Coin Magnet (60 m pull), Lucky Horseshoe (boosts ×2, far more coin arcs),
-  Barnacle Plating (−50% damage, −4% launch)
+- **Hull**: Beach Wheels 3,000 (roll on after splashdown), Pontoons 4,500 (+14° skip window,
+  +6% drag), Spring Keel 11,000 (+26% bounce)
+- **Rig**: Storm Sail 6,000 (constant push; squalls blow you along instead of down),
+  Box Kite 9,000 (−16% gravity), Jet Vent 16,000 (+15% rockets and +1)
+- **Trinket**: Coin Magnet 3,500 (60 m pull), Lucky Horseshoe 13,000 (boosts ×2, far more coin
+  arcs), Barnacle Plating 7,000 (−50% damage, −4% launch)
 
 ### 3. Launchers (`Core/Launchers.swift`) — 4, each a different aim ritual
 
@@ -58,9 +58,9 @@ than the only one, so nothing that already worked was thrown away.
 | Launcher | Price | Ritual |
 |---|---|---|
 | Old Lighthouse Cannon | free | Two taps: lock the angle, lock the power |
-| Surf Rod & Reel | 5,000 | Angle, then a fast **cast bar** — tap inside the green band for ×1.28 |
-| Tidal Slingshot | 9,000 | Angle, then **hold to draw**; hold past full and the band snaps to 30% |
-| Torpedo Tube | 14,000 | Two fast sweeps, 6–28° and low. Wider skip window and a tougher casing, so you start the run already skipping |
+| Surf Rod & Reel | 22,000 | Angle, then a fast **cast bar** — tap inside the green band for ×1.28 |
+| Tidal Slingshot | 40,000 | Angle, then **hold to draw**; hold past full and the band snaps to 30% |
+| Torpedo Tube | 65,000 | Two fast sweeps, 6–28° and low. Wider skip window and a tougher casing, so you start the run already skipping |
 
 ### 4. Long tail
 
@@ -126,3 +126,50 @@ that would have been miserable to find by hand, all since fixed:
 Re-run it with `python3 Tools/sim.py`. It prints the core progression, then every rider, part,
 launcher and daily modifier measured against a baseline, then the coin economy walkthrough.
 
+## Pacing (sim, median of 300 runs, Marlow + cannon + no gear unless stated)
+
+| Build | v1 | now | note |
+|---|---|---|---|
+| Fresh boat, clumsy | ~280 m | **348 m** | |
+| Fresh boat, decent | 280–320 m | **429 m** | |
+| L1 H1 R1 | ~640 m | **889 m** | |
+| Mid-late (L3 H2 R2 A2 U1) | ~1,500 m | **2,014 m** | |
+| Fully upgraded, decent | ~6,500 m | **8,558 m** | 5% of runs sink |
+| Max + best distance build | — | **12,174 m** | Chum + wheels/kite/horseshoe + torpedo, skilled |
+| Max + coin build + prestige 3 | — | 6,694 m / **20,282 coins** | Pip + keel/vent/magnet + rod & reel |
+
+**The whole curve moved up about a third, and that is the abilities.** The shape is unchanged
+and the shop prices are untouched — the greedy-buyer walkthrough still maxes all five tracks in
+15 runs, exactly as it did in v1 — but every rider now has a third verb worth 1.05–1.36×, so a
+run goes further at every tier. If play-testing says the early game got too easy, the cheapest
+dial is `Tuning.abilityTuckCooldown` (Marlow is the only rider a new player has), then the
+per-ability duration/cooldown pairs; do **not** reach for the launch-speed tables, which is
+what the whole upgrade curve is built on.
+
+### Launcher character (mid-late, skill 0.6 → 0.9)
+
+| Launcher | 0.6 | 0.9 | Identity |
+|---|---|---|---|
+| Cannon | 2,058 | 2,417 | The honest baseline |
+| Rod & Reel | 1,824 | 2,673 | Skill-gated: worse than the cannon until you hit the band |
+| Slingshot | 1,974 | 2,615 | Skill-gated: worse until you stop letting the band snap |
+| Torpedo Tube | 2,656 | 2,927 | ~4.5 PERFECT skips a run vs the cannon's 0.7 — it is the skip-chain launcher |
+
+That the two mid launchers *lose* to the cannon at low skill and beat it at high skill is
+deliberate, and it is the main thing to confirm by hand: a player has to be able to feel the
+band and the draw, or those two are just worse.
+
+### Locker economy
+
+The five shop tracks max out in 15 runs; the locker is the long tail after that. Every unlock
+costs 3–10 runs of saving at the tier you first want it, ~300,000 coins for all nineteen —
+before missions, trophies and the daily, which the simulation does not count. Prestige's
++25%/level coin multiplier is what makes a second pass quick.
+
+## Suggested first prompt for Claude Code on the Mac
+
+> Build BayBlaster for the iOS Simulator with xcodebuild and fix the compile errors — the
+> locker update was written without a Swift toolchain. Then run it and check: a run launches
+> and the ability button fires; the Locker's four tabs draw and a purchase sticks across a
+> relaunch; each of the four launchers' aim rituals works; and a save from the previous build
+> still loads.
