@@ -21,6 +21,9 @@ final class TitleScene: SKScene {
     private var launchButton: ButtonNode!
     private var shopButton: ButtonNode!
     private var muteButton: ButtonNode!
+    private let missionsHeader = SKLabelNode.make("MISSIONS", size: 13, font: Tuning.fontHeavy,
+                                                  color: UIColor(red: 1, green: 0.9, blue: 0.4, alpha: 1), align: .left)
+    private var missionLabels: [SKLabelNode] = []
 
     override init(size: CGSize) {
         super.init(size: size)
@@ -68,6 +71,13 @@ final class TitleScene: SKScene {
         ui.addChild(bestLabel)
         ui.addChild(coinsLabel)
         ui.addChild(statsLabel)
+
+        ui.addChild(missionsHeader)
+        for _ in 0..<Missions.activeCount {
+            let l = SKLabelNode.make("", size: 14, font: Tuning.fontMedium, color: UIColor.white.withAlphaComponent(0.9), align: .left)
+            missionLabels.append(l)
+            ui.addChild(l)
+        }
 
         launchButton = ButtonNode(text: "LAUNCH!", size: CGSize(width: 240, height: 66), color: UIColor(red: 0.95, green: 0.45, blue: 0.2, alpha: 1), fontSize: 30)
         launchButton.action = { [weak self] in
@@ -117,6 +127,10 @@ final class TitleScene: SKScene {
 
         bestLabel.position = CGPoint(x: left, y: top - 12)
         coinsLabel.position = CGPoint(x: left, y: top - 38)
+        missionsHeader.position = CGPoint(x: left, y: top - 76)
+        for (i, l) in missionLabels.enumerated() {
+            l.position = CGPoint(x: left, y: top - 96 - CGFloat(i) * 20)
+        }
         muteButton.position = CGPoint(x: right - 28, y: top - 22)
 
         launchButton.position = CGPoint(x: 0, y: compact ? -8 : 0)
@@ -125,7 +139,14 @@ final class TitleScene: SKScene {
     }
 
     private func refreshLabels() {
+        Missions.refill()
         let d = SaveManager.shared.data
+        for (i, l) in missionLabels.enumerated() {
+            guard i < d.missions.count else { l.text = ""; continue }
+            let m = d.missions[i]
+            l.text = "\(m.completed ? "✓" : "•")  \(m.title)   +\(m.reward)"
+            l.fontColor = m.completed ? UIColor(red: 0.6, green: 1, blue: 0.6, alpha: 1) : UIColor.white.withAlphaComponent(0.9)
+        }
         bestLabel.text = "Best: \(Int(d.bestDistance)) m"
         coinsLabel.text = "Coins: \(d.coins)"
         muteButton.text = d.muted ? "MUTED" : "SOUND"

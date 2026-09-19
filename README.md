@@ -33,6 +33,7 @@ target to landscape in *General → Deployment Info*.
 |---|---|
 | Every tunable number | `Core/Constants.swift` |
 | Save file (Documents/bayblaster-save.json) | `Core/SaveManager.swift` |
+| Missions (kinds, targets, rotation, evaluation) | `Core/Missions.swift` |
 | Procedural sounds (AVAudioEngine synth) | `Core/AudioManager.swift` |
 | Haptics | `Core/Haptics.swift` |
 | Placeholder art + swap mechanism | `Core/Art.swift` |

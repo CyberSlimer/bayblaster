@@ -146,6 +146,11 @@ enum Tuning {
     static let luckyLureByTier: [CGFloat]            = [1.0, 1.25, 1.5, 1.8, 2.1, 2.5]       // boost-weight multiplier
     static let basePrices: [UpgradeKind: Int]        = [.launcher: 260, .hull: 200, .rockets: 320, .aero: 360, .lure: 220]
 
+    // MARK: - Missions
+    static let missionLevelEvery = 3                  // difficulty level rises every N completed missions
+    static let missionRewardByLevel = [100, 180, 300, 500, 800, 1200]
+    static let missionDistanceStretch: Double = 1.1   // distance missions ask for at least best × this
+
     // MARK: - Milestones
     static let milestoneIntervalMeters: CGFloat = 250 // a flag every this many metres
     static let milestoneSpawnAhead: CGFloat = 5000    // place flags this far ahead of the boat (points)

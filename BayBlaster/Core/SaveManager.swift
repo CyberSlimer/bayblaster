@@ -29,6 +29,9 @@ struct SaveData: Codable, Equatable {
     var bestDistance: Double = 0           // metres
     var stats = Stats()
     var muted: Bool = false
+    var missions: [Mission] = []
+    var missionsCompleted: Int = 0
+    var nextMissionId: Int = 1
 
     init() {}
 
@@ -41,6 +44,9 @@ struct SaveData: Codable, Equatable {
         bestDistance = try c.decodeIfPresent(Double.self, forKey: .bestDistance) ?? 0
         stats = try c.decodeIfPresent(Stats.self, forKey: .stats) ?? Stats()
         muted = try c.decodeIfPresent(Bool.self, forKey: .muted) ?? false
+        missions = try c.decodeIfPresent([Mission].self, forKey: .missions) ?? []
+        missionsCompleted = try c.decodeIfPresent(Int.self, forKey: .missionsCompleted) ?? 0
+        nextMissionId = try c.decodeIfPresent(Int.self, forKey: .nextMissionId) ?? 1
         // Clamp anything a hand-edited file might have pushed out of range.
         for (k, v) in upgrades { upgrades[k] = min(max(v, 0), Tuning.upgradeMaxTier) }
     }

@@ -33,6 +33,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var bestCombo = 0
     private var perfectSkips = 0
     private var flyingSeconds: CGFloat = 0
+    private var rocketsFired = 0
+    private var hazardsHit = 0
+    private var entityHits: [String: Int] = [:]
 
     private var holdTouch: UITouch?
     private var touchDownTime: TimeInterval = 0
@@ -44,6 +47,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     // MARK: - Lifecycle
 
     override init(size: CGSize) {
+        Missions.refill()                        // swap out anything completed last run
         config = UpgradeConfig(save: SaveManager.shared.data)
         super.init(size: size)
         scaleMode = .resizeFill
@@ -255,11 +259,17 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         let zones = pendingZoneChanges
         pendingZoneChanges.removeAll()
         for change in zones {
-            if change.entered { change.entity.enterZone(player: player) } else { change.entity.exitZone(player: player) }
+            if change.entered {
+                change.entity.enterZone(player: player)
+                noteHit(change.entity.kind)
+            } else {
+                change.entity.exitZone(player: player)
+            }
         }
         let hits = pendingOneShots
         pendingOneShots.removeAll()
         for e in hits where phase == .flying {
+            if !e.consumed { noteHit(e.kind) }
             e.apply(to: player, in: self)
         }
     }
@@ -280,6 +290,12 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             AudioManager.shared.play(.milestone, volume: 0.6)
             Haptics.medium(0.5)
         }
+    }
+
+    /// Mission bookkeeping: what the boat touched this run.
+    private func noteHit(_ kind: EntityKind) {
+        entityHits[kind.spec.artKey, default: 0] += 1
+        if kind.spec.isHazard { hazardsHit += 1 }
     }
 
     // MARK: - Entity callbacks
@@ -407,6 +423,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func fireRocket() {
         if player.fireRocket() {
+            rocketsFired += 1
             AudioManager.shared.play(.rocket)
             Haptics.medium()
             cam.shake(4)
@@ -446,25 +463,40 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         let isNewBest = SaveManager.shared.recordRun(distance: Double(distanceMetres),
                                                      coins: runCoins,
                                                      longestFlight: Double(player.longestFlightTime))
+        var stats = RunStats()
+        stats.distance = Double(distanceMetres)
+        stats.coins = runCoins
+        stats.skips = skipsThisRun
+        stats.bestCombo = bestCombo
+        stats.perfects = perfectSkips
+        stats.rocketsFired = rocketsFired
+        stats.hazardsHit = hazardsHit
+        stats.hits = entityHits
+        let missionResults = Missions.evaluate(run: stats)
+
         run(.sequence([
             .wait(forDuration: sunk ? 1.4 : 0.7),
-            .run { [weak self] in self?.showResults(sunk: sunk, newBest: isNewBest) }
+            .run { [weak self] in self?.showResults(sunk: sunk, newBest: isNewBest, missions: missionResults) }
         ]))
     }
 
-    private func showResults(sunk: Bool, newBest: Bool) {
+    private func showResults(sunk: Bool, newBest: Bool, missions: [MissionResult]) {
         let overlay = SKNode()
         overlay.zPosition = 2000
-        let panel = PanelNode(size: CGSize(width: 460, height: 272))
+        let missionRows = missions.count
+        let missionBlock = CGFloat(missionRows) * 22 + (missionRows > 0 ? 14 : 0)
+        let panel = PanelNode(size: CGSize(width: 480, height: 272 + missionBlock))
         overlay.addChild(panel)
+        // Everything above the buttons shifts up by half the mission block; buttons shift down.
+        let up = missionBlock / 2
 
         let title = SKLabelNode.make(sunk ? "GLUG GLUG… SUNK!" : "SPLASHDOWN!", size: 26, font: Tuning.fontHeavy,
                                      color: sunk ? UIColor(red: 1, green: 0.5, blue: 0.4, alpha: 1) : UIColor(red: 0.6, green: 0.95, blue: 1, alpha: 1))
-        title.position = CGPoint(x: 0, y: 104)
+        title.position = CGPoint(x: 0, y: 104 + up)
         panel.addChild(title)
 
         let distance = SKLabelNode.make("0 m", size: 52, font: Tuning.fontHeavy)
-        distance.position = CGPoint(x: 0, y: 52)
+        distance.position = CGPoint(x: 0, y: 52 + up)
         panel.addChild(distance)
         let finalMetres = Int(distanceMetres)
         distance.run(.customAction(withDuration: Tuning.resultsCountUpDuration) { node, elapsed in
@@ -478,12 +510,41 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         if perfectSkips > 0 { summary += "   ·   \(perfectSkips) perfect" }
         let coins = SKLabelNode.make(summary, size: bestCombo >= 3 || perfectSkips > 0 ? 17 : 20,
                                      color: UIColor(red: 1, green: 0.9, blue: 0.4, alpha: 1))
-        coins.position = CGPoint(x: 0, y: 12)
+        coins.position = CGPoint(x: 0, y: 12 + up)
         panel.addChild(coins)
+
+        // Mission rows: "✓ Skip 5 times in one run  +180" or "Ride 2 dolphins  1/2".
+        var rowY = -20 + up - 28          // first row sits just under the Best / NEW BEST line
+        for (i, r) in missions.enumerated() {
+            let done = r.mission.completed
+            let name = SKLabelNode.make((done ? "✓  " : "•  ") + r.mission.title, size: 15, font: Tuning.fontMedium,
+                                        color: done ? UIColor(red: 0.6, green: 1, blue: 0.6, alpha: 1) : UIColor.white.withAlphaComponent(0.85),
+                                        align: .left)
+            name.position = CGPoint(x: -218, y: rowY)
+            panel.addChild(name)
+            let status = SKLabelNode.make(r.justCompleted ? "+\(r.mission.reward)" : (done ? "done" : "\(r.progress)/\(r.mission.target)"),
+                                          size: 15, font: Tuning.fontHeavy,
+                                          color: done ? UIColor(red: 1, green: 0.85, blue: 0.3, alpha: 1) : UIColor.white.withAlphaComponent(0.6),
+                                          align: .right)
+            status.position = CGPoint(x: 218, y: rowY)
+            panel.addChild(status)
+            if r.justCompleted {
+                status.setScale(0.1)
+                status.run(.sequence([
+                    .wait(forDuration: Tuning.resultsCountUpDuration + 0.25 * Double(i)),
+                    .run { AudioManager.shared.play(.purchase, volume: 0.8); Haptics.success() },
+                    .scale(to: 1.3, duration: 0.15), .scale(to: 1, duration: 0.1)
+                ]))
+                name.run(.sequence([.wait(forDuration: Tuning.resultsCountUpDuration + 0.25 * Double(i)),
+                                    .run { name.fontColor = UIColor(red: 0.6, green: 1, blue: 0.6, alpha: 1) }]))
+                name.fontColor = UIColor.white.withAlphaComponent(0.85)
+            }
+            rowY -= 22
+        }
 
         if newBest {
             let best = SKLabelNode.make("★ NEW BEST ★", size: 22, font: Tuning.fontHeavy, color: UIColor(red: 1, green: 0.75, blue: 0.2, alpha: 1))
-            best.position = CGPoint(x: 0, y: -20)
+            best.position = CGPoint(x: 0, y: -20 + up)
             best.setScale(0.1)
             panel.addChild(best)
             best.run(.sequence([
@@ -496,12 +557,12 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         } else {
             let best = SKLabelNode.make("Best: \(Int(SaveManager.shared.data.bestDistance)) m", size: 18,
                                         color: UIColor.white.withAlphaComponent(0.7))
-            best.position = CGPoint(x: 0, y: -20)
+            best.position = CGPoint(x: 0, y: -20 + up)
             panel.addChild(best)
         }
 
         let again = ButtonNode(text: "LAUNCH AGAIN", size: CGSize(width: 200, height: 54), color: UIColor(red: 0.95, green: 0.45, blue: 0.2, alpha: 1))
-        again.position = CGPoint(x: -110, y: -84)
+        again.position = CGPoint(x: -110, y: -84 - up)
         again.action = { [weak self] in
             guard let self = self else { return }
             SceneRouter.present(GameScene(size: self.size), from: self)
@@ -509,7 +570,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         panel.addChild(again)
 
         let shop = ButtonNode(text: "SHOP", size: CGSize(width: 200, height: 54), color: UIColor(red: 0.25, green: 0.6, blue: 0.95, alpha: 1))
-        shop.position = CGPoint(x: 110, y: -84)
+        shop.position = CGPoint(x: 110, y: -84 - up)
         shop.action = { [weak self] in
             guard let self = self else { return }
             SceneRouter.present(ShopScene(size: self.size), from: self, reveal: true)

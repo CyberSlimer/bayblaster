@@ -18,6 +18,11 @@ Added 2026-09-18 (Mac session), aimed at the genre's retention hooks:
   combo and perfect count.
 - **Milestone flags** every 250 m and a gold **★ YOUR BEST ★** flag at the saved best.
 - **Spawn fairness**: the hazard share is ×0.45 right after a waterline hazard.
+- **Missions**: 3 active per-run goals (12 kinds in `Core/Missions.swift`: distance, skips,
+  combo, perfect, coins, dolphins, buoys, whales, balloons, mines, rockets, untouched). Shown
+  on the title screen and the results card; completing one pays coins, and it is replaced
+  at the start of the next run. Difficulty level = completions ÷ 3 (`Tuning.missionLevelEvery`),
+  rewards `Tuning.missionRewardByLevel`. Distance missions always ask for ≥ best × 1.1.
 - Debug-only test hook: launch with env `BB_ANGLE=32 BB_POWER=1` to force the aim locks
   (`SIMCTL_CHILD_` prefix for `simctl launch`). See `Launcher.swift`.
 
