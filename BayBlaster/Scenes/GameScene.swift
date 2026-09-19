@@ -36,6 +36,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var rocketsFired = 0
     private var hazardsHit = 0
     private var entityHits: [String: Int] = [:]
+    private var missionCheckTimer: CGFloat = 0
+    private var announcedMissionIds: Set<Int> = []
 
     private var holdTouch: UITouch?
     private var touchDownTime: TimeInterval = 0
@@ -149,6 +151,11 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             hud.setCoins(runCoins)
             hud.setRockets(player.rockets)
             hud.setHull(fraction: player.hullFraction)
+            missionCheckTimer += dt
+            if missionCheckTimer > 0.4 {
+                missionCheckTimer = 0
+                checkMissionsMidRun()
+            }
             checkRunEnd()
 
         case .ended:
@@ -294,8 +301,44 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     /// Mission bookkeeping: what the boat touched this run.
     private func noteHit(_ kind: EntityKind) {
-        entityHits[kind.spec.artKey, default: 0] += 1
+        let key = kind.spec.artKey
+        entityHits[key, default: 0] += 1
         if kind.spec.isHazard { hazardsHit += 1 }
+
+        // First time ever touching this kind: explain it.
+        if let tip = kind.tip, !SaveManager.shared.data.seenEntities.contains(key) {
+            SaveManager.shared.mutate { $0.seenEntities.append(key) }
+            Banner.show(title: tip.title, subtitle: tip.detail, in: cam, sceneSize: size,
+                        insets: view?.safeAreaInsets ?? .zero,
+                        color: kind.spec.isHazard ? UIColor(red: 1, green: 0.55, blue: 0.4, alpha: 1)
+                                                  : UIColor(red: 0.6, green: 0.95, blue: 1, alpha: 1))
+        }
+    }
+
+    private func currentRunStats() -> RunStats {
+        var stats = RunStats()
+        stats.distance = Double(distanceMetres)
+        stats.coins = runCoins
+        stats.skips = skipsThisRun
+        stats.bestCombo = bestCombo
+        stats.perfects = perfectSkips
+        stats.rocketsFired = rocketsFired
+        stats.hazardsHit = hazardsHit
+        stats.hits = entityHits
+        return stats
+    }
+
+    /// Announce a mission the moment it is satisfied (payment still happens at run end).
+    /// "Untouched" can't be known until the run ends, so it is skipped here.
+    private func checkMissionsMidRun() {
+        for m in Missions.satisfied(by: currentRunStats()) where !announcedMissionIds.contains(m.id) && m.kind != .untouched {
+            announcedMissionIds.insert(m.id)
+            Banner.show(title: "MISSION COMPLETE  +\(m.reward)", subtitle: m.title, in: cam, sceneSize: size,
+                        insets: view?.safeAreaInsets ?? .zero,
+                        color: UIColor(red: 0.6, green: 1, blue: 0.6, alpha: 1))
+            AudioManager.shared.play(.purchase, volume: 0.8)
+            Haptics.success()
+        }
     }
 
     // MARK: - Entity callbacks
@@ -463,16 +506,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         let isNewBest = SaveManager.shared.recordRun(distance: Double(distanceMetres),
                                                      coins: runCoins,
                                                      longestFlight: Double(player.longestFlightTime))
-        var stats = RunStats()
-        stats.distance = Double(distanceMetres)
-        stats.coins = runCoins
-        stats.skips = skipsThisRun
-        stats.bestCombo = bestCombo
-        stats.perfects = perfectSkips
-        stats.rocketsFired = rocketsFired
-        stats.hazardsHit = hazardsHit
-        stats.hits = entityHits
-        let missionResults = Missions.evaluate(run: stats)
+        let missionResults = Missions.evaluate(run: currentRunStats())
 
         run(.sequence([
             .wait(forDuration: sunk ? 1.4 : 0.7),
@@ -555,10 +589,17 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                 .repeatForever(.sequence([.scale(to: 1.06, duration: 0.5), .scale(to: 1, duration: 0.5)]))
             ]))
         } else {
-            let best = SKLabelNode.make("Best: \(Int(SaveManager.shared.data.bestDistance)) m", size: 18,
-                                        color: UIColor.white.withAlphaComponent(0.7))
+            let bestMetres = Int(SaveManager.shared.data.bestDistance)
+            let short = bestMetres - Int(distanceMetres)
+            let close = short > 0 && CGFloat(short) <= max(50, CGFloat(bestMetres) * Tuning.nearBestFraction)
+            let best = SKLabelNode.make(close ? "Only \(short) m short of your best!" : "Best: \(bestMetres) m", size: 18,
+                                        font: close ? Tuning.fontHeavy : Tuning.fontBold,
+                                        color: close ? UIColor(red: 1, green: 0.75, blue: 0.2, alpha: 1) : UIColor.white.withAlphaComponent(0.7))
             best.position = CGPoint(x: 0, y: -20 + up)
             panel.addChild(best)
+            if close {
+                best.run(.repeatForever(.sequence([.scale(to: 1.05, duration: 0.5), .scale(to: 1, duration: 0.5)])))
+            }
         }
 
         let again = ButtonNode(text: "LAUNCH AGAIN", size: CGSize(width: 200, height: 54), color: UIColor(red: 0.95, green: 0.45, blue: 0.2, alpha: 1))

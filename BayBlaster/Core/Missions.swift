@@ -160,6 +160,12 @@ enum Missions {
         return Mission(id: save.nextMissionId, kind: kind, target: target, reward: Tuning.missionRewardByLevel[li])
     }
 
+    /// Non-mutating: which active, uncompleted missions would be satisfied by `run` right now.
+    /// Used mid-run for the MISSION COMPLETE banner; payment happens in `evaluate`.
+    static func satisfied(by run: RunStats) -> [Mission] {
+        SaveManager.shared.data.missions.filter { !$0.completed && $0.kind.progress(in: run) >= $0.target }
+    }
+
     /// Check every active mission against a finished run, pay out the ones that completed,
     /// and return the per-mission status for the results card.
     @discardableResult

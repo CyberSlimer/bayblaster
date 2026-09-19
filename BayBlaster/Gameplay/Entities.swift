@@ -42,6 +42,41 @@ enum EntityKind: CaseIterable {
 
     static let boosts = EntityKind.allCases.filter { !$0.spec.isHazard && $0.spec.weight > 0 }
     static let hazards = EntityKind.allCases.filter { $0.spec.isHazard && $0.spec.weight > 0 }
+
+    /// Distance (metres) before this kind starts spawning, so the bay gets meaner as the player
+    /// gets further and every run early on introduces at most a couple of new things.
+    var unlockMetres: CGFloat {
+        switch self {
+        case .shark:      return 150
+        case .balloon:    return 200
+        case .jellyfish:  return 250
+        case .stormCloud: return 300
+        case .dolphin:    return 300
+        case .mine:       return 400
+        case .whirlpool:  return 700
+        default:          return 0
+        }
+    }
+
+    /// One-line tip shown the first time the boat ever touches this kind.
+    var tip: (title: String, detail: String)? {
+        switch self {
+        case .buoy:       return ("BUOY", "Springy — bounces you back up.")
+        case .whaleSpout: return ("WHALE SPOUT", "A huge vertical launch.")
+        case .motor:      return ("OUTBOARD MOTOR", "A burst of forward speed.")
+        case .birdFlock:  return ("SEAGULL FLOCK", "Fly through for lift and push.")
+        case .dolphin:    return ("DOLPHIN", "Rides you forward at full speed.")
+        case .balloon:    return ("BALLOONS", "Low gravity for a couple of seconds.")
+        case .rock:       return ("ROCK", "Hurts and kills your speed.")
+        case .net:        return ("FISHING NET", "Tangles you — big slowdown.")
+        case .shark:      return ("SHARK", "Bites the hull, knocks you up.")
+        case .stormCloud: return ("STORM CLOUD", "Pushes you down while inside.")
+        case .mine:       return ("SEA MINE", "Hurts, but blasts you skyward!")
+        case .jellyfish:  return ("JELLYFISH", "Stings — no rockets or dive for a moment.")
+        case .whirlpool:  return ("WHIRLPOOL", "Drags you down. Skip clear of it!")
+        case .coinBag, .fuelCan, .coin: return nil
+        }
+    }
     /// Waterline hazards are the ones that can form an unfair wall; the spawner spaces these out.
     var isWaterHazard: Bool { spec.isHazard && spec.heightRange.upperBound == 0 }
 }

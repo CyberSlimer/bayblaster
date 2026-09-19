@@ -32,6 +32,7 @@ struct SaveData: Codable, Equatable {
     var missions: [Mission] = []
     var missionsCompleted: Int = 0
     var nextMissionId: Int = 1
+    var seenEntities: [String] = []        // art keys the boat has touched at least once (first-touch tips)
 
     init() {}
 
@@ -47,6 +48,7 @@ struct SaveData: Codable, Equatable {
         missions = try c.decodeIfPresent([Mission].self, forKey: .missions) ?? []
         missionsCompleted = try c.decodeIfPresent(Int.self, forKey: .missionsCompleted) ?? 0
         nextMissionId = try c.decodeIfPresent(Int.self, forKey: .nextMissionId) ?? 1
+        seenEntities = try c.decodeIfPresent([String].self, forKey: .seenEntities) ?? []
         // Clamp anything a hand-edited file might have pushed out of range.
         for (k, v) in upgrades { upgrades[k] = min(max(v, 0), Tuning.upgradeMaxTier) }
     }

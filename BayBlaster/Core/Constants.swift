@@ -158,6 +158,7 @@ enum Tuning {
     // MARK: - Presentation
     static let dayNightMeters: CGFloat = 3000         // sky is fully night after this distance
     static let resultsCountUpDuration: TimeInterval = 1.4
+    static let nearBestFraction: CGFloat = 0.2        // "only N m short of your best" shows within this fraction of best
     static let fontHeavy = "AvenirNext-Heavy"
     static let fontBold = "AvenirNext-Bold"
     static let fontMedium = "AvenirNext-DemiBold"

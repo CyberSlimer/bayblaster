@@ -188,6 +188,57 @@ final class HUD: SKNode {
     }
 }
 
+/// Screen-space banner (tips, MISSION COMPLETE). Slides in under the top HUD, holds, fades.
+/// Only one shows at a time; a new one replaces the current.
+final class Banner {
+    private static var current: SKNode?
+
+    static func show(title: String, subtitle: String? = nil, in camera: SKNode, sceneSize: CGSize, insets: UIEdgeInsets,
+                     color: UIColor = UIColor(red: 1, green: 0.9, blue: 0.4, alpha: 1), duration: TimeInterval = 2.4) {
+        current?.removeFromParent()
+        let node = SKNode()
+        node.zPosition = 900
+        let top = sceneSize.height / 2 - insets.top
+        node.position = CGPoint(x: 0, y: top - 74)
+
+        let t = SKLabelNode(fontNamed: Tuning.fontHeavy)
+        t.text = title
+        t.fontSize = 24
+        t.fontColor = color
+        t.verticalAlignmentMode = .center
+        node.addChild(t)
+        if let subtitle = subtitle {
+            let sub = SKLabelNode(fontNamed: Tuning.fontMedium)
+            sub.text = subtitle
+            sub.fontSize = 15
+            sub.fontColor = UIColor.white.withAlphaComponent(0.9)
+            sub.verticalAlignmentMode = .center
+            sub.position = CGPoint(x: 0, y: -22)
+            node.addChild(sub)
+        }
+        let width = max(t.frame.width, (node.children.last?.frame.width ?? 0)) + 44
+        let height: CGFloat = subtitle == nil ? 40 : 60
+        let bg = SKShapeNode(rectOf: CGSize(width: width, height: height), cornerRadius: 12)
+        bg.fillColor = UIColor(red: 0.05, green: 0.1, blue: 0.2, alpha: 0.8)
+        bg.strokeColor = color.withAlphaComponent(0.6)
+        bg.lineWidth = 2
+        bg.position = CGPoint(x: 0, y: subtitle == nil ? 0 : -11)
+        bg.zPosition = -1
+        node.addChild(bg)
+
+        node.alpha = 0
+        node.setScale(0.8)
+        camera.addChild(node)
+        current = node
+        node.run(.sequence([
+            .group([.fadeIn(withDuration: 0.15), .scale(to: 1, duration: 0.2)]),
+            .wait(forDuration: duration),
+            .fadeOut(withDuration: 0.3),
+            .removeFromParent()
+        ]))
+    }
+}
+
 /// Rising "+40" style label. Add to the world at the pickup position.
 final class FloatingLabel {
     static func show(_ text: String, at position: CGPoint, in parent: SKNode, color: UIColor = UIColor(red: 1, green: 0.9, blue: 0.4, alpha: 1), fontSize: CGFloat = 26) {

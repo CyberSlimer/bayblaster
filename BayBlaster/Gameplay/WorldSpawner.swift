@@ -50,7 +50,8 @@ final class WorldSpawner {
             return
         }
 
-        let kind = WorldSpawner.pick(from: isBoost ? EntityKind.boosts : EntityKind.hazards)
+        let pool = (isBoost ? EntityKind.boosts : EntityKind.hazards).filter { $0.unlockMetres <= metres }
+        let kind = WorldSpawner.pick(from: pool)
         lastWasWaterHazard = kind.isWaterHazard
         place(kind, at: CGPoint(x: x, y: Tuning.waterY + CGFloat.random(in: kind.spec.heightRange)), in: world)
     }

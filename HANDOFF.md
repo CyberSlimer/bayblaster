@@ -23,6 +23,12 @@ Added 2026-09-18 (Mac session), aimed at the genre's retention hooks:
   on the title screen and the results card; completing one pays coins, and it is replaced
   at the start of the next run. Difficulty level = completions ÷ 3 (`Tuning.missionLevelEvery`),
   rewards `Tuning.missionRewardByLevel`. Distance missions always ask for ≥ best × 1.1.
+- **Progressive unlocks**: kinds start spawning past a distance (`EntityKind.unlockMetres`:
+  shark 150 m, balloons 200, jellyfish 250, storm cloud / dolphin 300, mine 400, whirlpool
+  700). The first time the boat ever touches a kind, a screen-space `Banner` explains it
+  (`EntityKind.tip`; tracked in `SaveData.seenEntities`).
+- **Mid-run MISSION COMPLETE banner** the moment a goal is met (payment still at run end),
+  and an "Only N m short of your best!" tease on the results card when within 20% of best.
 - Debug-only test hook: launch with env `BB_ANGLE=32 BB_POWER=1` to force the aim locks
   (`SIMCTL_CHILD_` prefix for `simctl launch`). See `Launcher.swift`.
 

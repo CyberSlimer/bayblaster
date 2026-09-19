@@ -73,9 +73,11 @@ HAZ = {
     'whirl': dict(w=15, y=(0, 0), r=90),
 }
 WATER_HAZ = {'rock', 'net', 'shark', 'mine', 'whirl'}
+UNLOCK_M = {'shark': 150, 'balloon': 200, 'jelly': 250, 'cloud': 300, 'dolphin': 300, 'mine': 400, 'whirl': 700}
 ZONES = {'birds', 'cloud', 'whirl'}
 
-def pick(table):
+def pick(table, metres=1e9):
+    table = {k: v for k, v in table.items() if UNLOCK_M.get(k, 0) <= metres}
     tot = sum(v['w'] for v in table.values())
     r = random.random()*tot
     for k, v in table.items():
@@ -133,9 +135,9 @@ def run(tiers, player_skill=0.6, verbose=False):
                     last_water_haz = False
                     next_spawn += random.uniform(*SPAWN_INTERVAL_M)*PPM/density
                     continue
-                k = pick(BOOSTS); spec = BOOSTS[k]; is_h = False
+                k = pick(BOOSTS, d_m); spec = BOOSTS[k]; is_h = False
             else:
-                k = pick(HAZ); spec = HAZ[k]; is_h = True
+                k = pick(HAZ, d_m); spec = HAZ[k]; is_h = True
             last_water_haz = k in WATER_HAZ
             ey = random.uniform(*spec['y'])
             ents.append([next_spawn, ey, spec['r'], k, is_h, False])
