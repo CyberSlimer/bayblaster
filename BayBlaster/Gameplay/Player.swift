@@ -85,7 +85,7 @@ final class Player: SKNode {
         set { physicsBody?.velocity = newValue }
     }
 
-    var speed: CGFloat {
+    var boatSpeed: CGFloat {
         let v = velocity
         return (v.dx * v.dx + v.dy * v.dy).squareRoot()
     }

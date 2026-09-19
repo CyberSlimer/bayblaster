@@ -9,11 +9,10 @@ placeholder vector art with a one-drop PNG swap. ~3,300 lines across 19 Swift fi
 
 ## What has NOT been done
 
-1. **Compile.** Written on Windows; never built. Open `BayBlaster.xcodeproj` in Xcode 16+,
-   set your signing team, build for a Simulator, fix errors. The riskiest spots (reviewed but
-   unverified): implicit-member `SKAction` chains in array literals (`Entities.swift`,
-   `GameScene.swift`), `Codable` `init(from:)` in `SaveManager.swift`, the synthesized
-   `Voice` memberwise init in `AudioManager.swift`.
+1. ~~**Compile.**~~ Done 2026-09-18 (Xcode 26.6, iPhone 16 Pro Max Simulator). Only error was
+   `Player.speed` colliding with `SKNode.speed` → renamed `boatSpeed`. Zero warnings. A full
+   run, a shop purchase and a relaunch all behaved; `Documents/bayblaster-save.json` was
+   written as expected.
 2. **Play-test.** Things to feel out on device, all tunable in `Constants.swift`:
    - Camera: `cameraVisibleHeight` (boat may look small on iPhone), `cameraLeadFactor`.
    - Aim feel: `angleSweepPeriod`, `powerSweepPeriod`.

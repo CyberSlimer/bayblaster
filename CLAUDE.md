@@ -6,9 +6,11 @@ Lighthouse Cannon. See README.md for the file map and HANDOFF.md for current sta
 
 ## Status (as of 2026-09-18)
 
-- All v1 features are implemented; **the code has never been compiled**. It was written on a
-  Windows machine without Xcode and only self-reviewed. First task on a Mac: build it and fix
-  whatever the compiler reports, then play a few runs on the Simulator.
+- All v1 features are implemented. Written on Windows without Xcode; first compiled on a Mac
+  on 2026-09-18 with Xcode 26.6 (one fix: `Player.speed` renamed to `boatSpeed`, since
+  `SKNode` already declares a mutable `speed`). Builds with zero warnings. Smoke-tested on the
+  iPhone 16 Pro Max Simulator: title → aim → flight → splashdown → shop purchase → save
+  persists across relaunch. Remaining work is play-testing/tuning (see HANDOFF.md).
 - Pacing constants were tuned with `Tools/sim.py` (a Python mirror of the physics). If you change
   anything in `Tuning` that affects distance, mirror it in `sim.py` and re-run
   `python3 Tools/sim.py` so the pacing table stays honest.
