@@ -20,6 +20,20 @@ final class HUD: SKNode {
     private let powerFill = SKSpriteNode(color: UIColor(red: 1, green: 0.75, blue: 0.2, alpha: 1), size: CGSize(width: 16, height: 154))
     private let powerLabel = SKLabelNode(fontNamed: Tuning.fontMedium)
     private let angleLabel = SKLabelNode(fontNamed: Tuning.fontHeavy)
+    /// The green band on a .castTiming launcher, and the red "it's about to snap" zone on a
+    /// .charge one. Hidden for the plain two-sweep launchers.
+    private let sweetBand = SKShapeNode(rectOf: CGSize(width: 22, height: 10), cornerRadius: 4)
+
+    // Ability button (the third in-flight verb)
+    private let abilityRing = SKShapeNode(circleOfRadius: 34)
+    private let abilityFill = SKShapeNode(circleOfRadius: 30)
+    private let abilityLabel = SKLabelNode(fontNamed: Tuning.fontHeavy)
+    private let abilityShieldPip = SKLabelNode(fontNamed: Tuning.fontBold)
+    /// Where the ability button sits on screen, so GameScene can decide whether a touch was
+    /// meant for it rather than for a rocket/dive.
+    private(set) var abilityButtonCentre: CGPoint = .zero
+    static let abilityButtonRadius: CGFloat = 40
+    private var abilityEnabled = false
 
     private var lastRockets = -1
     private var lastCoins = -1
@@ -93,6 +107,32 @@ final class HUD: SKNode {
         angleLabel.verticalAlignmentMode = .top
         addChild(angleLabel)
 
+        sweetBand.fillColor = UIColor(red: 0.3, green: 0.95, blue: 0.5, alpha: 0.55)
+        sweetBand.strokeColor = UIColor(red: 0.5, green: 1, blue: 0.7, alpha: 0.95)
+        sweetBand.lineWidth = 2
+        sweetBand.isHidden = true
+        addChild(sweetBand)
+
+        abilityRing.fillColor = UIColor.black.withAlphaComponent(0.35)
+        abilityRing.strokeColor = UIColor.white.withAlphaComponent(0.7)
+        abilityRing.lineWidth = 2
+        addChild(abilityRing)
+        abilityFill.fillColor = UIColor(red: 0.35, green: 0.75, blue: 1, alpha: 0.85)
+        abilityFill.strokeColor = .clear
+        addChild(abilityFill)
+        abilityLabel.fontSize = 13
+        abilityLabel.fontColor = .white
+        abilityLabel.verticalAlignmentMode = .center
+        abilityLabel.horizontalAlignmentMode = .center
+        addChild(abilityLabel)
+        abilityShieldPip.fontSize = 12
+        abilityShieldPip.fontColor = UIColor(red: 1, green: 0.85, blue: 0.4, alpha: 1)
+        abilityShieldPip.verticalAlignmentMode = .center
+        abilityShieldPip.horizontalAlignmentMode = .center
+        abilityShieldPip.text = ""
+        addChild(abilityShieldPip)
+        setAbilityVisible(false)
+
         setAimWidgets(visible: false)
     }
 
@@ -125,6 +165,14 @@ final class HUD: SKNode {
         powerFill.position = CGPoint(x: left + 40, y: -77)
         powerLabel.position = CGPoint(x: left + 40, y: -88)
         angleLabel.position = CGPoint(x: left + 40, y: 96)
+        sweetBand.position = CGPoint(x: left + 40, y: 0)
+
+        // Bottom-right, above the hull bar, comfortably inside the thumb's reach.
+        abilityButtonCentre = CGPoint(x: right - 54, y: bottom + 74)
+        abilityRing.position = abilityButtonCentre
+        abilityFill.position = abilityButtonCentre
+        abilityLabel.position = abilityButtonCentre
+        abilityShieldPip.position = CGPoint(x: abilityButtonCentre.x + 26, y: abilityButtonCentre.y + 26)
     }
 
     // MARK: - Updates
@@ -175,6 +223,7 @@ final class HUD: SKNode {
         powerFill.isHidden = !visible
         powerLabel.isHidden = !visible
         angleLabel.isHidden = !visible
+        if !visible { sweetBand.isHidden = true }
         pauseHint.isHidden = visible
     }
 
@@ -185,6 +234,93 @@ final class HUD: SKNode {
         powerFill.color = power > 0.85
             ? UIColor(red: 0.3, green: 0.95, blue: 0.5, alpha: 1)
             : UIColor(red: 1, green: 0.75, blue: 0.2, alpha: 1)
+    }
+
+    /// Dress the power bar for the selected launcher: a green band to tap inside for a rod &
+    /// reel, a red "about to snap" zone at the top for a slingshot, nothing for the rest.
+    func setLauncherStyle(_ launcher: Launcher) {
+        let barBottom: CGFloat = -77
+        let barHeight: CGFloat = 154
+        switch launcher.aimMode {
+        case .twoSweep:
+            sweetBand.isHidden = true
+        case .castTiming:
+            let centre = barBottom + barHeight * launcher.sweetSpot
+            let height = max(8, barHeight * launcher.sweetSpotHalfWidth * 2)
+            sweetBand.path = CGPath(roundedRect: CGRect(x: -11, y: -height / 2, width: 22, height: height),
+                                    cornerWidth: 4, cornerHeight: 4, transform: nil)
+            sweetBand.fillColor = UIColor(red: 0.3, green: 0.95, blue: 0.5, alpha: 0.55)
+            sweetBand.strokeColor = UIColor(red: 0.5, green: 1, blue: 0.7, alpha: 0.95)
+            sweetBand.position = CGPoint(x: powerBack.position.x, y: centre)
+            sweetBand.isHidden = false
+        case .charge:
+            // The top slice of the bar is the danger zone: full draw, about to let go.
+            let height: CGFloat = 20
+            sweetBand.path = CGPath(roundedRect: CGRect(x: -11, y: -height / 2, width: 22, height: height),
+                                    cornerWidth: 4, cornerHeight: 4, transform: nil)
+            sweetBand.fillColor = UIColor(red: 0.95, green: 0.3, blue: 0.25, alpha: 0.5)
+            sweetBand.strokeColor = UIColor(red: 1, green: 0.5, blue: 0.4, alpha: 0.95)
+            sweetBand.position = CGPoint(x: powerBack.position.x, y: barBottom + barHeight - height / 2)
+            sweetBand.isHidden = false
+        }
+    }
+
+    // MARK: - Ability button
+
+    func setAbilityVisible(_ visible: Bool) {
+        abilityRing.isHidden = !visible
+        abilityFill.isHidden = !visible
+        abilityLabel.isHidden = !visible
+        abilityShieldPip.isHidden = !visible
+    }
+
+    func configureAbility(_ ability: Ability) {
+        abilityLabel.text = ability.buttonLabel
+        abilityLabel.fontSize = ability.buttonLabel.count > 5 ? 11 : 13
+        setAbilityVisible(true)
+    }
+
+    /// `charge` is 0…1 (1 = ready). The disc fills as the cooldown runs down and brightens
+    /// the moment it is usable, so the button reads at a glance mid-flight.
+    func setAbility(charge: CGFloat, ready: Bool, shields: Int) {
+        let f = clamp(charge, 0, 1)
+        // A disc that grows from the centre is cheaper than redrawing a pie slice each frame
+        // and reads just as clearly at this size.
+        abilityFill.setScale(max(0.08, f))
+        abilityFill.fillColor = ready
+            ? UIColor(red: 0.35, green: 0.85, blue: 1, alpha: 0.95)
+            : UIColor(red: 0.35, green: 0.55, blue: 0.75, alpha: 0.6)
+        abilityRing.strokeColor = ready ? UIColor.white : UIColor.white.withAlphaComponent(0.45)
+        abilityLabel.alpha = ready ? 1 : 0.55
+        if ready != abilityEnabled {
+            abilityEnabled = ready
+            if ready {
+                abilityRing.removeAllActions()
+                abilityRing.run(.sequence([.scale(to: 1.15, duration: 0.12), .scale(to: 1, duration: 0.12)]))
+            }
+        }
+        abilityShieldPip.text = shields > 0 ? "◈\(shields)" : ""
+    }
+
+    /// True if `point` (in HUD/camera space) is on the ability button.
+    func abilityButtonContains(_ point: CGPoint) -> Bool {
+        guard !abilityRing.isHidden else { return false }
+        let dx = point.x - abilityButtonCentre.x, dy = point.y - abilityButtonCentre.y
+        return dx * dx + dy * dy <= HUD.abilityButtonRadius * HUD.abilityButtonRadius
+    }
+
+    func flashAbility() {
+        abilityRing.removeAllActions()
+        abilityRing.run(.sequence([.scale(to: 0.85, duration: 0.06), .scale(to: 1, duration: 0.12)]))
+    }
+
+    /// The bottom-of-screen control hint, which now has three verbs to explain.
+    func setControlHint(ability: Ability?) {
+        if let ability = ability {
+            pauseHint.text = "TAP: rocket   ·   HOLD: dive   ·   \(ability.buttonLabel): \(ability.title.lowercased())"
+        } else {
+            pauseHint.text = "TAP: rocket   ·   HOLD: nose-dive"
+        }
     }
 }
 

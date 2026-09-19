@@ -53,6 +53,7 @@ enum Tuning {
     static let perfectSkipAngleDegrees: CGFloat = 22  // impact angle under this is a PERFECT skip. Each skip flattens the next landing, so a flat launch earns these mid-combo; diving (steeper) trades them for a wider skip window.
     static let perfectSkipSpeedBonus: CGFloat = 1.04  // horizontal speed multiplier on a perfect skip (on top of retention)
     static let perfectSkipCoins = 15
+    static let forcedSkipMinBounce: CGFloat = 260  // floor on the bounce when an ability forces a skip off a flat landing
 
     // MARK: - Launcher (aim phase)
     static let launchAngleMinDegrees: CGFloat = 15
@@ -146,6 +147,164 @@ enum Tuning {
     static let luckyLureByTier: [CGFloat]            = [1.0, 1.25, 1.5, 1.8, 2.1, 2.5]       // boost-weight multiplier
     static let basePrices: [UpgradeKind: Int]        = [.launcher: 260, .hull: 200, .rockets: 320, .aero: 360, .lure: 220]
 
+    // MARK: - Crew perks (Core/Crew.swift)
+    // Marlow is deliberately the only rider with no distance perk, so the pacing table in
+    // sim.py still describes a stock run. Everyone else trades something for something.
+    static let crewMarlowCooldownMultiplier: CGFloat = 0.8    // Marlow: abilities come back sooner
+    static let crewBristleHullMultiplier: CGFloat = 1.35      // Bristle the pufferfish
+    static let crewBristleRetentionBonus: CGFloat = 0.012     // …and a rounder hull skips a little better
+    static let crewBristleDragMultiplier: CGFloat = 0.88      // …and pushes a little less air. Hull alone measured at ~1.0x: a mid-tier run almost never sinks, so pure forgiveness is invisible in the pacing table.
+    static let crewNixieDragMultiplier: CGFloat = 0.68        // Nixie the flying fish
+    static let crewGillyBonusRockets = 1                      // Gilly the squid
+    static let crewBrunoRetentionBonus: CGFloat = 0.045       // Bruno the otter, added to the hull tier
+    static let crewBrunoDragMultiplier: CGFloat = 0.88        // …retention alone was only worth ~3%; drag is what actually carries a run
+    static let crewTockDamageMultiplier: CGFloat = 0.50       // Tock the hermit crab
+    static let crewTockHullMultiplier: CGFloat = 1.25         // …plus a thicker shell…
+    static let crewTockDragMultiplier: CGFloat = 0.80         // …and a low, streamlined profile, so the perk pays on a clean run too
+    static let crewPipCoinMultiplier: CGFloat = 1.7           // Pip the seagull
+    static let crewChumDragMultiplier: CGFloat = 0.80         // Chum the baby shark: slippery…
+    static let crewChumLaunchMultiplier: CGFloat = 1.20       // …fast…
+    static let crewChumHullMultiplier: CGFloat = 0.85         // …and fragile
+    // Ordered by the measured power ladder in HANDOFF.md, not by flavour — Pip sits early
+    // because buying the coin rider speeds up everything after it.
+    //
+    // The absolute numbers come from the coins-per-run figures sim.py prints: the five shop
+    // tracks max out in ~15 runs, and the locker is deliberately the long tail *after* that,
+    // so nothing here should be affordable in one or two runs at the tier you first want it.
+    static let crewPrices: [CrewMember: Int] = [
+        .marlow: 0, .bristle: 2_500, .bruno: 5_500, .pip: 8_000,
+        .tock: 11_000, .chum: 17_000, .gilly: 24_000, .nixie: 32_000
+    ]
+
+    // MARK: - Abilities (the third in-flight verb; HUD button)
+    static let abilityMinCooldown: CGFloat = 2.0              // floor, however much a perk shortens it
+    static let abilityFrenzyCoinMultiplier: CGFloat = 2.0
+
+    static let abilityTuckSeconds: CGFloat = 1.2
+    static let abilityTuckCooldown: CGFloat = 7
+    static let abilityTuckDragMultiplier: CGFloat = 0.55      // air drag while tucked. Drag dominates distance, so this is deliberately mild — at 0.15 a single rider was worth 2x the whole run.
+    static let abilityTuckPush: CGFloat = 100                 // pt/s² forward while tucked
+
+    static let abilityPuffSeconds: CGFloat = 2.2
+    static let abilityPuffCooldown: CGFloat = 7
+    static let abilityPuffRestitutionMultiplier: CGFloat = 1.15
+
+    static let abilityGlideSeconds: CGFloat = 1.6
+    static let abilityGlideCooldown: CGFloat = 7
+    static let abilityGlideGravityMultiplier: CGFloat = 0.55
+    static let abilityGlidePush: CGFloat = 70                 // pt/s² forward while gliding
+
+    static let abilityShellCooldown: CGFloat = 6
+    static let abilityShellCharges = 2                        // hazards soaked up per use
+
+    static let abilityInkJetCooldown: CGFloat = 5
+    static let abilityInkJetForward: CGFloat = 150
+    static let abilityInkJetUp: CGFloat = 40
+
+    static let abilitySlamCooldown: CGFloat = 6
+    static let abilitySlamDownSpeed: CGFloat = 900            // vertical speed the slam forces
+    static let abilitySlamRestitutionMultiplier: CGFloat = 1.50 // …paid back on the landing it causes
+    static let abilitySlamForwardBonus: CGFloat = 1.22        // …and the slam landing keeps extra horizontal speed, so it reads as a dive-bomb for distance rather than a pogo
+
+    static let abilitySwoopCooldown: CGFloat = 5
+    static let abilitySwoopRange: CGFloat = 900               // how far ahead it looks for a pickup
+    static let abilitySwoopMinTargetY: CGFloat = -200         // ignore pickups more than this far below: diving for one costs more speed than it pays
+    static let abilitySwoopSpeedKeep: CGFloat = 1.08          // speed kept when the flight is redirected (slightly over 1: the snap itself is the reward)
+
+    static let abilityFrenzySeconds: CGFloat = 4.0
+    static let abilityFrenzyCooldown: CGFloat = 10
+
+    // MARK: - Gear (Core/Gear.swift)
+    static let gearWheelsPlowDragMultiplier: CGFloat = 0.35   // Beach Wheels: you roll on after splashdown
+    static let gearPontoonsSkipAngleBonus: CGFloat = 14       // Pontoons: degrees added to the skip window
+    static let gearPontoonsDragMultiplier: CGFloat = 1.06     // …at the cost of air drag
+    static let gearSpringKeelRestitutionMultiplier: CGFloat = 1.26
+    static let gearStormSailPush: CGFloat = 32                // pt/s² forward while airborne. Higher than this and you arrive at the water fast enough to hole the hull on nearly every run.
+    static let gearBoxKiteGravityMultiplier: CGFloat = 0.84
+    static let gearJetVentRocketMultiplier: CGFloat = 1.15
+    static let gearJetVentBonusRockets = 1
+    static let gearCoinMagnetRadius: CGFloat = 600            // points; coins inside this home in
+    static let gearMagnetPullSpeed: CGFloat = 900             // pt/s a magnetised coin travels
+    static let gearHorseshoeBoostMultiplier: CGFloat = 2.0
+    static let gearHorseshoeCoinArcBonus: CGFloat = 0.28      // added to coinArcChance
+    static let gearBarnacleLaunchMultiplier: CGFloat = 0.96
+    static let gearBarnacleDamageMultiplier: CGFloat = 0.5
+    // Cheapest first within a slot, and priced against how much each part measured at.
+    static let gearPrices: [GearItem: Int] = [
+        .wheels: 3_000, .pontoons: 4_500, .springKeel: 11_000,
+        .stormSail: 6_000, .boxKite: 9_000, .jetVent: 16_000,
+        .coinMagnet: 3_500, .luckyHorseshoe: 13_000, .barnaclePlate: 7_000
+    ]
+
+    // MARK: - Launchers (Core/Launchers.swift)
+    // The cannon reuses the Launcher block above; these are the three unlockables.
+    // Surf Rod & Reel — narrower, faster angle sweep, then a cast bar with a sweet zone.
+    static let rodAngleMinDegrees: CGFloat = 25
+    static let rodAngleMaxDegrees: CGFloat = 65
+    static let rodAngleSweepPeriod: CGFloat = 1.8
+    static let rodCastPeriod: CGFloat = 0.9                   // the cast bar sweeps fast
+    static let rodMinPowerFraction: CGFloat = 0.40
+    static let rodSpeedMultiplier: CGFloat = 0.95             // below the cannon *unless* you hit the band
+    static let rodMuzzleHeight: CGFloat = 74
+    static let rodBarrelLength: CGFloat = 92
+    static let rodSweetSpot: CGFloat = 0.82                   // centre of the green band, in power units
+    static let rodSweetSpotHalfWidth: CGFloat = 0.11
+    static let rodSweetSpotBonus: CGFloat = 1.28              // speed multiplier for a banded cast
+
+    // Tidal Slingshot — hold to draw. Hold past full and the band snaps.
+    static let slingAngleMinDegrees: CGFloat = 20
+    static let slingAngleMaxDegrees: CGFloat = 70
+    static let slingAngleSweepPeriod: CGFloat = 2.0
+    static let slingDrawSeconds: CGFloat = 1.1                // 0 → full draw
+    static let slingMinPowerFraction: CGFloat = 0.30
+    static let slingSpeedMultiplier: CGFloat = 1.18
+    static let slingMuzzleHeight: CGFloat = 52
+    static let slingBarrelLength: CGFloat = 70
+    static let slingOverchargeGrace: CGFloat = 0.35           // seconds at full draw before it snaps
+    static let slingSnapPower: CGFloat = 0.30                 // what the power collapses to on a snap
+
+    // Torpedo Tube — low, flat and very fast. You start the run already skipping.
+    static let torpedoAngleMinDegrees: CGFloat = 6
+    static let torpedoAngleMaxDegrees: CGFloat = 28
+    static let torpedoAngleSweepPeriod: CGFloat = 1.6
+    static let torpedoPowerPeriod: CGFloat = 1.1
+    static let torpedoMinPowerFraction: CGFloat = 0.60
+    static let torpedoSpeedMultiplier: CGFloat = 1.12
+    static let torpedoMuzzleHeight: CGFloat = 34
+    static let torpedoBarrelLength: CGFloat = 84
+    static let torpedoSkipAngleBonus: CGFloat = 8             // it is shaped to skim, so the window is wider…
+    static let torpedoHardImpactBonus: CGFloat = 600          // …and the casing takes a flat landing that would hole the dinghy
+    // The big-ticket items: a new launcher changes how every run *starts*, so each one is
+    // meant to be a goal you save toward for a while rather than an incidental purchase.
+    static let launcherPrices: [LauncherKind: Int] = [
+        .cannon: 0, .rodReel: 22_000, .slingshot: 40_000, .torpedo: 65_000
+    ]
+
+    // MARK: - Loadout ceilings
+    // Crew and gear stack multiplicatively; these stop a fully-kitted build from reaching a
+    // skip that loses no energy at all (which would make a run never end).
+    static let skipRetentionCeiling: CGFloat = 0.985
+    static let skipRestitutionCeiling: CGFloat = 0.90
+
+    // MARK: - Prestige ("cast off")
+    static let prestigeCoinBonusPerLevel: CGFloat = 0.25      // +25% coins per cast-off, forever
+
+    // MARK: - Daily challenge
+    static let dailyBaseReward = 250
+    static let dailyCoinsPerMetre = 0.5
+    static let dailyStreakBonus = 120                         // per day of streak…
+    static let dailyStreakCap = 10                            // …up to this many days
+
+    // MARK: - Achievements
+    static let achievementRewards: [Achievement: Int] = [
+        .firstSplash: 150, .fly500: 200, .fly1000: 400, .fly2500: 800, .fly5000: 1600,
+        .skipper: 400, .comboKing: 600, .perfectionist: 600, .bigHaul: 500,
+        .unscathed: 500, .daredevil: 700, .abilityAce: 500,
+        .trekker: 700, .voyager: 2000, .regular: 400, .veteran: 1800,
+        .crewOfThree: 500, .fullCrew: 2500, .firstPart: 250, .fullGarage: 2500,
+        .fullArsenal: 2500, .maxedOut: 2000, .castOff: 1500, .dailyDoer: 300, .weekStreak: 1500
+    ]
+
     // MARK: - Missions
     static let missionLevelEvery = 3                  // difficulty level rises every N completed missions
     static let missionRewardByLevel = [100, 180, 300, 500, 800, 1200]
@@ -181,10 +340,10 @@ enum UpgradeKind: String, CaseIterable, Codable {
 
     var blurb: String {
         switch self {
-        case .launcher: return "Bigger bang from the lighthouse cannon."
+        case .launcher: return "Bigger bang, whichever launcher you pick."
         case .hull:     return "Tougher hull, slicker skips."
         case .rockets:  return "Tap in the air for a burst of speed."
-        case .aero:     return "Marlow tucks his fins. Less air drag."
+        case .aero:     return "Your rider tucks in. Less air drag."
         case .lure:     return "More boosts spawn along the bay."
         }
     }
@@ -210,29 +369,9 @@ enum UpgradeKind: String, CaseIterable, Codable {
     }
 }
 
-/// Snapshot of what the current upgrade tiers mean in physics terms. Built once per run.
-struct UpgradeConfig {
-    let launchSpeed: CGFloat
-    let maxHull: CGFloat
-    let skipHorizontalRetention: CGFloat
-    let hardImpactThreshold: CGFloat
-    let rocketCount: Int
-    let rocketStrength: CGFloat
-    let airDrag: CGFloat
-    let boostWeightMultiplier: CGFloat
-
-    init(save: SaveData) {
-        func tier(_ k: UpgradeKind) -> Int { min(max(save.tier(of: k), 0), Tuning.upgradeMaxTier) }
-        launchSpeed = Tuning.launchSpeedByTier[tier(.launcher)]
-        maxHull = Tuning.hullMaxByTier[tier(.hull)]
-        skipHorizontalRetention = Tuning.skipRetentionByTier[tier(.hull)]
-        hardImpactThreshold = Tuning.hardImpactThresholdByTier[tier(.hull)]
-        rocketCount = Tuning.rocketCountByTier[tier(.rockets)]
-        rocketStrength = Tuning.rocketStrengthByTier[tier(.rockets)]
-        airDrag = Tuning.airDragByTier[tier(.aero)]
-        boostWeightMultiplier = Tuning.luckyLureByTier[tier(.lure)]
-    }
-}
+/// `UpgradeConfig` — the resolved per-run numbers — now lives in Core/Loadout.swift, where
+/// it folds these tables together with the selected rider, the equipped gear, the prestige
+/// level and (on a daily run) the modifier of the day.
 
 // MARK: - Small math helpers used across the game
 

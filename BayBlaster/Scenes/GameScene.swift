@@ -1,12 +1,16 @@
 import SpriteKit
 
 /// One run: aim → fly → results. Owns the camera, world, player, spawner and HUD.
+///
+/// A run is either a normal run or a DAILY CHALLENGE (`init(size:daily:)`). A daily run seeds
+/// the spawner from the date so the bay is identical for every attempt that day, folds the
+/// modifier of the day into the loadout, and pays its reward once per day on the results card.
 final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     enum Phase { case aiming, flying, ended }
 
     /// Feedback requests from entities (see WorldEntity.apply).
-    enum JuiceKind { case bump, whale, motor, hurt, net, dolphin, balloon, explosion, sting }
+    enum JuiceKind { case bump, whale, motor, hurt, net, dolphin, balloon, explosion, sting, blocked }
 
     private var phase: Phase = .aiming
     private let cam = GameCamera()
@@ -38,6 +42,11 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var entityHits: [String: Int] = [:]
     private var missionCheckTimer: CGFloat = 0
     private var announcedMissionIds: Set<Int> = []
+    private var abilitiesUsed = 0
+
+    /// Non-nil on a daily-challenge run.
+    private let daily: DailyChallenge?
+    private var isDaily: Bool { daily != nil }
 
     private var holdTouch: UITouch?
     private var touchDownTime: TimeInterval = 0
@@ -50,7 +59,17 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     override init(size: CGSize) {
         Missions.refill()                        // swap out anything completed last run
+        daily = nil
         config = UpgradeConfig(save: SaveManager.shared.data)
+        super.init(size: size)
+        scaleMode = .resizeFill
+    }
+
+    /// A daily-challenge run: seeded bay, modifier of the day, reward paid once per day.
+    init(size: CGSize, daily: DailyChallenge?) {
+        Missions.refill()
+        self.daily = daily
+        config = UpgradeConfig(save: SaveManager.shared.data, daily: daily?.modifier.effect)
         super.init(size: size)
         scaleMode = .resizeFill
     }
@@ -78,7 +97,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
         background = Background(scene: self, camera: cam)
 
-        launcher = Launcher()
+        launcher = Launcher(kind: config.launcher)
         world.addChild(launcher)
 
         player = Player(config: config)
@@ -86,7 +105,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         world.addChild(player)
         placePlayerAtMuzzle()
 
-        spawner = WorldSpawner(world: world, config: config)
+        spawner = WorldSpawner(world: world, config: config, seed: daily?.seed)
         milestones = Milestones(world: world, bestDistance: CGFloat(SaveManager.shared.data.bestDistance))
         milestones.onPass = { [weak self] metres, isBest in self?.passedMilestone(metres: metres, isBest: isBest) }
 
@@ -98,9 +117,18 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         hud.setCoins(0)
         hud.setDistance(0)
         hud.setHull(fraction: 1)
+        hud.configureAbility(config.ability)
+        hud.setAbilityVisible(false)             // shown once the boat is in the air
+        hud.setControlHint(ability: config.ability)
 
         splashTemplate = GameScene.makeSplashTemplate()
         cam.snap(to: player.position)
+
+        if let daily = daily {
+            Banner.show(title: "DAILY · \(daily.modifier.title)", subtitle: daily.modifier.detail,
+                        in: cam, sceneSize: size, insets: view?.safeAreaInsets ?? .zero,
+                        color: UIColor(red: 0.6, green: 1, blue: 0.8, alpha: 1), duration: 3.2)
+        }
     }
 
     override func didChangeSize(_ oldSize: CGSize) {
@@ -112,6 +140,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func layoutHUD() {
         hud?.layout(sceneSize: size, insets: view?.safeAreaInsets ?? .zero)
+        // The cast band / draw-danger zone is positioned relative to the power bar, so it has
+        // to be re-styled after every layout pass.
+        if let hud = hud, let launcher = launcher { hud.setLauncherStyle(launcher) }
     }
 
     private func placePlayerAtMuzzle() {
@@ -137,6 +168,10 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             player.update(dt: dt)
             cam.follow(target: player.position, velocity: .zero, dt: dt)
             background.update(camera: cam, distanceMetres: 0, dt: dt)
+            // Every launcher funnels through the same exit: the moment its aim ritual reaches
+            // `.fired` we launch. That covers a tap-lock, a released draw, and a band that
+            // snapped on its own without the player letting go.
+            if launcher.aimState == .fired { fire() }
 
         case .flying:
             player.isDiving = holdTouch != nil && (currentTime - touchDownTime) >= GameScene.tapHoldThreshold
@@ -151,6 +186,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             hud.setCoins(runCoins)
             hud.setRockets(player.rockets)
             hud.setHull(fraction: player.hullFraction)
+            hud.setAbility(charge: player.abilityChargeFraction, ready: player.isAbilityReady,
+                           shields: player.shieldCharges)
+            updateMagnet(dt: dt)
             missionCheckTimer += dt
             if missionCheckTimer > 0.4 {
                 missionCheckTimer = 0
@@ -171,12 +209,28 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         processContacts()
     }
 
+    /// Coin Magnet: drag uncollected arc coins toward the boat so a near miss still pays.
+    /// The physics contact still does the collecting — this only moves the coins.
+    private func updateMagnet(dt: CGFloat) {
+        guard config.hasMagnet, player.state != .sunk else { return }
+        let step = Tuning.gearMagnetPullSpeed * dt
+        for coin in spawner.magnetisableCoins(near: player.position, radius: config.magnetRadius) {
+            let dx = player.position.x - coin.position.x
+            let dy = player.position.y - coin.position.y
+            let distance = (dx * dx + dy * dy).squareRoot()
+            guard distance > 1 else { continue }
+            let move = min(step, distance)
+            coin.position = CGPoint(x: coin.position.x + dx / distance * move,
+                                    y: coin.position.y + dy / distance * move)
+        }
+    }
+
     private func updateDistance() {
         let metres = max(0, (player.position.x - Tuning.launchX) / Tuning.pointsPerMeter)
         distanceMetres = max(distanceMetres, metres)
         let whole = Int(distanceMetres)
         if whole > coinedMetres {
-            runCoins += (whole - coinedMetres) * Tuning.coinsPerMeter
+            runCoins += payout((whole - coinedMetres) * Tuning.coinsPerMeter)
             coinedMetres = whole
         }
     }
@@ -197,7 +251,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func handle(_ outcome: WaterSkipSystem.Outcome) {
         switch outcome {
-        case .skipped(let impactSpeed, let hard, let damage, let perfect):
+        case .skipped(let impactSpeed, let hard, let damage, let perfect, let forced):
             skipsThisRun += 1
             skipCombo += 1
             bestCombo = max(bestCombo, skipCombo)
@@ -215,7 +269,12 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                 FloatingLabel.show("PERFECT!", at: player.position + CGPoint(x: 0, y: 64), in: world,
                                    color: UIColor(red: 1, green: 0.85, blue: 0.3, alpha: 1), fontSize: 26)
             }
-            runCoins += bonus
+            runCoins += payout(bonus)
+            if forced {
+                // An ability saved a landing that would otherwise have ended the combo.
+                FloatingLabel.show("SAVED!", at: player.position + CGPoint(x: 0, y: 92), in: world,
+                                   color: UIColor(red: 0.6, green: 1, blue: 0.75, alpha: 1), fontSize: 22)
+            }
             let comboColor = skipCombo >= 5 ? UIColor(red: 1, green: 0.6, blue: 0.2, alpha: 1)
                                             : UIColor(red: 0.7, green: 0.95, blue: 1, alpha: 1)
             FloatingLabel.show("SKIP ×\(skipCombo)  +\(bonus)", at: player.position + CGPoint(x: 0, y: 36), in: world,
@@ -276,6 +335,11 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         let hits = pendingOneShots
         pendingOneShots.removeAll()
         for e in hits where phase == .flying {
+            // Tock's shell eats the whole hazard, so it never counts as a hit either.
+            if e.kind.spec.isHazard, !e.consumed, player.consumeShield() {
+                e.blockByShield(in: self)
+                continue
+            }
             if !e.consumed { noteHit(e.kind) }
             e.apply(to: player, in: self)
         }
@@ -325,6 +389,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         stats.rocketsFired = rocketsFired
         stats.hazardsHit = hazardsHit
         stats.hits = entityHits
+        stats.abilitiesUsed = abilitiesUsed
+        stats.endHullFraction = Double(player.hullFraction)
+        stats.isDaily = isDaily
         return stats
     }
 
@@ -345,13 +412,20 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     /// `quiet` is for rapid pickups (coin arcs): a lighter sound and no haptic so eight coins
     /// in a row don't buzz the phone.
+    /// Everything that scales a coin payout: the rider, the prestige level, the daily
+    /// modifier (all baked into `config`) and Chum's frenzy, which is live.
+    func payout(_ base: Int) -> Int {
+        config.payout(base, frenzied: player?.activeAbility == .frenzy)
+    }
+
     func awardCoins(_ amount: Int, at position: CGPoint, quiet: Bool = false) {
-        runCoins += amount
+        let paid = payout(amount)
+        runCoins += paid
         if quiet {
-            FloatingLabel.show("+\(amount)", at: position, in: world, fontSize: 16)
+            FloatingLabel.show("+\(paid)", at: position, in: world, fontSize: 16)
             AudioManager.shared.play(.coin, volume: 0.45)
         } else {
-            FloatingLabel.show("+\(amount)", at: position, in: world)
+            FloatingLabel.show("+\(paid)", at: position, in: world)
             AudioManager.shared.play(.coin)
             Haptics.medium(0.6)
         }
@@ -360,9 +434,10 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     func damagePlayer(_ amount: CGFloat, shake: CGFloat) {
         guard phase == .flying else { return }
         if shake > 0 { cam.shake(shake) }
+        let shown = player.effectiveDamage(amount)
         let sunk = player.applyDamage(amount)
         hud.setHull(fraction: player.hullFraction)
-        FloatingLabel.show("-\(Int(amount))", at: player.position + CGPoint(x: 0, y: 30), in: world,
+        FloatingLabel.show("-\(max(1, Int(shown.rounded())))", at: player.position + CGPoint(x: 0, y: 30), in: world,
                            color: UIColor(red: 1, green: 0.4, blue: 0.35, alpha: 1), fontSize: 22)
         if sunk {
             player.sink()
@@ -414,6 +489,11 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             AudioManager.shared.play(.hurt, volume: 0.7)
             Haptics.medium()
             FloatingLabel.show("STUNG! no rockets", at: position + CGPoint(x: 0, y: 40), in: world, color: UIColor(red: 0.85, green: 0.6, blue: 1, alpha: 1), fontSize: 20)
+        case .blocked:
+            AudioManager.shared.play(.bump, volume: 0.9)
+            Haptics.medium(0.9)
+            FloatingLabel.show("BLOCKED!", at: position + CGPoint(x: 0, y: 50), in: world,
+                               color: UIColor(red: 1, green: 0.8, blue: 0.4, alpha: 1), fontSize: 24)
         }
     }
 
@@ -428,15 +508,28 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                 launcher.lockAngle()
                 Haptics.lock()
                 AudioManager.shared.play(.lock)
-                hud.showHint("TAP to lock the power")
+                hud.showHint(launcher.kind.powerHint)
             case .sweepingPower:
-                launcher.lockPower()
-                Haptics.lock()
-                fire()
+                // A .charge launcher draws while the finger is down and fires on release;
+                // the others lock on the tap itself. `update` does the actual firing once
+                // the launcher reports `.fired`.
+                if launcher.aimMode == .charge {
+                    launcher.beginCharge()
+                    Haptics.medium(0.5)
+                } else {
+                    launcher.lockPower()
+                    Haptics.lock()
+                }
             case .fired:
                 break
             }
         case .flying:
+            // The ability button owns its corner of the screen; a touch there is never a
+            // rocket and never a dive.
+            if hud.abilityButtonContains(touch.location(in: hud)) {
+                useAbility()
+                return
+            }
             if holdTouch == nil {
                 holdTouch = touch
                 touchDownTime = touch.timestamp
@@ -447,10 +540,19 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        if phase == .aiming, launcher.aimMode == .charge, launcher.aimState == .sweepingPower {
+            launcher.releaseCharge()
+            Haptics.lock()
+            return
+        }
         releaseTouch(touches)
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        if phase == .aiming, launcher.aimMode == .charge, launcher.aimState == .sweepingPower {
+            launcher.releaseCharge()
+            return
+        }
         releaseTouch(touches)
     }
 
@@ -462,6 +564,70 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         if phase == .flying, heldFor < GameScene.tapHoldThreshold {
             fireRocket()
         }
+    }
+
+    // MARK: - Ability
+
+    /// The third in-flight verb. `Player.beginAbility` applies everything that only touches
+    /// the boat; anything that needs the world (Pip's swoop) is finished here.
+    private func useAbility() {
+        guard phase == .flying else { return }
+        guard let fired = player.beginAbility() else {
+            AudioManager.shared.play(.tick, volume: 0.35)
+            return
+        }
+        abilitiesUsed += 1
+        hud.flashAbility()
+        hud.setAbility(charge: player.abilityChargeFraction, ready: false, shields: player.shieldCharges)
+
+        if fired == .swoop, let target = nearestPickupAhead() {
+            player.swoop(toward: target)
+        }
+
+        AudioManager.shared.play(abilitySound(fired), volume: 0.9)
+        Haptics.medium(0.9)
+        cam.shake(fired == .slam ? 8 : 4)
+        FloatingLabel.show(fired.title, at: player.position + CGPoint(x: 0, y: 58), in: world,
+                           color: UIColor(red: 0.7, green: 0.95, blue: 1, alpha: 1), fontSize: 24)
+
+        // First time this rider's move is used, say what it does.
+        if !SaveManager.shared.data.seenAbilities.contains(fired.rawValue) {
+            SaveManager.shared.mutate { $0.seenAbilities.append(fired.rawValue) }
+            Banner.show(title: fired.title, subtitle: fired.hint, in: cam, sceneSize: size,
+                        insets: view?.safeAreaInsets ?? .zero,
+                        color: UIColor(red: 0.6, green: 0.95, blue: 1, alpha: 1))
+        }
+    }
+
+    private func abilitySound(_ ability: Ability) -> AudioManager.Sound {
+        switch ability {
+        case .inkJet, .slam, .swoop: return .rocket
+        case .puff, .glide:          return .pop
+        case .shell:                 return .lock
+        case .frenzy:                return .explosion
+        case .tuck:                  return .whale
+        }
+    }
+
+    /// The closest boost or coin ahead of the boat, for Pip's swoop.
+    private func nearestPickupAhead() -> CGPoint? {
+        var best: CGPoint?
+        var bestDistance = Tuning.abilitySwoopRange
+        for node in world.children {
+            guard let entity = node as? WorldEntity,
+                  !entity.consumed,
+                  !entity.kind.spec.isHazard,
+                  entity.position.x > player.position.x,
+                  entity.position.y - player.position.y > Tuning.abilitySwoopMinTargetY else { continue }
+            let dx = entity.position.x - player.position.x
+            let dy = entity.position.y - player.position.y
+            let distance = (dx * dx + dy * dy).squareRoot()
+            if distance < bestDistance {
+                bestDistance = distance
+                best = entity.position
+            }
+        }
+        return best
     }
 
     private func fireRocket() {
@@ -479,7 +645,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func fire() {
-        let speed = config.launchSpeed * lerp(Tuning.minPowerFraction, 1, launcher.power)
+        guard phase == .aiming else { return }
+        let speed = config.launchSpeed * launcher.speedMultiplier
+            * lerp(launcher.minPowerFraction, 1, launcher.power)
         let a = launcher.barrelAngle
         player.launch(velocity: CGVector(dx: cos(a) * speed, dy: sin(a) * speed))
         player.visual.zRotation = a
@@ -487,9 +655,23 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         phase = .flying
         hud.setAimWidgets(visible: false)
         hud.showHint(nil)
+        hud.setAbilityVisible(true)
+        hud.setAbility(charge: 1, ready: true, shields: 0)
         cam.shake(7)
         Haptics.heavy()
         AudioManager.shared.play(.launch)
+
+        // Tell the player how their launch went, when the launcher has something to say.
+        if launcher.didHitSweetSpot {
+            FloatingLabel.show("CLEAN CAST!", at: player.position + CGPoint(x: 0, y: 70), in: world,
+                               color: UIColor(red: 0.5, green: 1, blue: 0.6, alpha: 1), fontSize: 26)
+            AudioManager.shared.play(.perfect, volume: 0.9)
+            Haptics.success()
+        } else if launcher.didSnap {
+            FloatingLabel.show("SNAP!", at: player.position + CGPoint(x: 0, y: 70), in: world,
+                               color: UIColor(red: 1, green: 0.5, blue: 0.4, alpha: 1), fontSize: 26)
+            Haptics.failure()
+        }
     }
 
     // MARK: - Run end + results
@@ -503,28 +685,48 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         hud.setDistance(distanceMetres)
         hud.setCoins(runCoins)
 
+        let stats = currentRunStats()
         let isNewBest = SaveManager.shared.recordRun(distance: Double(distanceMetres),
                                                      coins: runCoins,
-                                                     longestFlight: Double(player.longestFlightTime))
-        let missionResults = Missions.evaluate(run: currentRunStats())
+                                                     longestFlight: Double(player.longestFlightTime),
+                                                     abilitiesUsed: abilitiesUsed)
+        let missionResults = Missions.evaluate(run: stats)
+        // A daily run pays its own reward once per day, on top of the coins from the run.
+        var dailyOutcome: SaveManager.DailyOutcome?
+        if let daily = daily {
+            dailyOutcome = SaveManager.shared.recordDaily(distance: Double(distanceMetres), challenge: daily)
+        }
+        // Achievements are checked last, against the save as it now stands, so "fly 100,000 m
+        // in total" can be won by the very run that is being reported.
+        let earned = Achievements.evaluate(run: stats)
 
         run(.sequence([
             .wait(forDuration: sunk ? 1.4 : 0.7),
-            .run { [weak self] in self?.showResults(sunk: sunk, newBest: isNewBest, missions: missionResults) }
+            .run { [weak self] in
+                self?.showResults(sunk: sunk, newBest: isNewBest, missions: missionResults,
+                                  achievements: earned, dailyOutcome: dailyOutcome)
+            }
         ]))
     }
 
-    private func showResults(sunk: Bool, newBest: Bool, missions: [MissionResult]) {
+    private func showResults(sunk: Bool, newBest: Bool, missions: [MissionResult],
+                             achievements: [Achievement], dailyOutcome: SaveManager.DailyOutcome?) {
         let overlay = SKNode()
         overlay.zPosition = 2000
         let missionRows = missions.count
         let missionBlock = CGFloat(missionRows) * 22 + (missionRows > 0 ? 14 : 0)
-        let panel = PanelNode(size: CGSize(width: 480, height: 272 + missionBlock))
+        // Trophies won this run get a row each, and a daily run gets one line for its payout.
+        let trophyBlock = CGFloat(achievements.count) * 20 + (achievements.isEmpty ? 0 : 10)
+        let dailyBlock: CGFloat = dailyOutcome == nil ? 0 : 22
+        let extraBlock = missionBlock + trophyBlock + dailyBlock
+        let panel = PanelNode(size: CGSize(width: 480, height: 272 + extraBlock))
         overlay.addChild(panel)
-        // Everything above the buttons shifts up by half the mission block; buttons shift down.
-        let up = missionBlock / 2
+        // Everything above the buttons shifts up by half the extra block; buttons shift down.
+        let up = extraBlock / 2
 
-        let title = SKLabelNode.make(sunk ? "GLUG GLUG… SUNK!" : "SPLASHDOWN!", size: 26, font: Tuning.fontHeavy,
+        var headline = sunk ? "GLUG GLUG… SUNK!" : "SPLASHDOWN!"
+        if let daily = daily { headline = "DAILY · \(daily.modifier.title)" }
+        let title = SKLabelNode.make(headline, size: 26, font: Tuning.fontHeavy,
                                      color: sunk ? UIColor(red: 1, green: 0.5, blue: 0.4, alpha: 1) : UIColor(red: 0.6, green: 0.95, blue: 1, alpha: 1))
         title.position = CGPoint(x: 0, y: 104 + up)
         panel.addChild(title)
@@ -576,6 +778,44 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             rowY -= 22
         }
 
+        // Trophies won by this run, each with its payout.
+        for (i, a) in achievements.enumerated() {
+            let row = SKLabelNode.make("🏆  \(a.title)", size: 14, font: Tuning.fontHeavy,
+                                       color: UIColor(red: 1, green: 0.85, blue: 0.35, alpha: 1), align: .left)
+            row.position = CGPoint(x: -218, y: rowY)
+            panel.addChild(row)
+            let value = SKLabelNode.make("+\(a.reward)", size: 14, font: Tuning.fontHeavy,
+                                         color: UIColor(red: 1, green: 0.85, blue: 0.35, alpha: 1), align: .right)
+            value.position = CGPoint(x: 218, y: rowY)
+            panel.addChild(value)
+            let delay = Tuning.resultsCountUpDuration + 0.2 * Double(i)
+            row.alpha = 0
+            value.alpha = 0
+            row.run(.sequence([.wait(forDuration: delay),
+                               .run { AudioManager.shared.play(.purchase, volume: 0.7); Haptics.success() },
+                               .fadeIn(withDuration: 0.2)]))
+            value.run(.sequence([.wait(forDuration: delay), .fadeIn(withDuration: 0.2)]))
+            rowY -= 20
+        }
+
+        // The daily payout line.
+        if let outcome = dailyOutcome {
+            let text: String
+            let colour: UIColor
+            if outcome.isFirstToday {
+                text = "Daily reward +\(outcome.reward)" + (outcome.streak > 1 ? "   ·   \(outcome.streak)-day streak" : "")
+                colour = UIColor(red: 0.6, green: 1, blue: 0.75, alpha: 1)
+            } else {
+                text = outcome.isDailyBest ? "New daily best! (reward already claimed today)"
+                                           : "Today's best: \(Int(SaveManager.shared.data.dailyBestDistance)) m"
+                colour = UIColor.white.withAlphaComponent(0.75)
+            }
+            let line = SKLabelNode.make(text, size: 15, font: Tuning.fontBold, color: colour)
+            line.position = CGPoint(x: 0, y: rowY - 2)
+            panel.addChild(line)
+            rowY -= 22
+        }
+
         if newBest {
             let best = SKLabelNode.make("★ NEW BEST ★", size: 22, font: Tuning.fontHeavy, color: UIColor(red: 1, green: 0.75, blue: 0.2, alpha: 1))
             best.position = CGPoint(x: 0, y: -20 + up)
@@ -602,21 +842,32 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             }
         }
 
-        let again = ButtonNode(text: "LAUNCH AGAIN", size: CGSize(width: 200, height: 54), color: UIColor(red: 0.95, green: 0.45, blue: 0.2, alpha: 1))
-        again.position = CGPoint(x: -110, y: -84 - up)
+        // Three buttons across a 480-wide panel: 145 each with 10 pt gaps, centred at ±155/0.
+        let againDaily = daily
+        let again = ButtonNode(text: "LAUNCH AGAIN", size: CGSize(width: 145, height: 54), color: UIColor(red: 0.95, green: 0.45, blue: 0.2, alpha: 1), fontSize: 17)
+        again.position = CGPoint(x: -155, y: -84 - up)
         again.action = { [weak self] in
             guard let self = self else { return }
-            SceneRouter.present(GameScene(size: self.size), from: self)
+            // Re-running a daily stays on the daily; the bay is the same all day.
+            SceneRouter.present(GameScene(size: self.size, daily: againDaily), from: self)
         }
         panel.addChild(again)
 
-        let shop = ButtonNode(text: "SHOP", size: CGSize(width: 200, height: 54), color: UIColor(red: 0.25, green: 0.6, blue: 0.95, alpha: 1))
-        shop.position = CGPoint(x: 110, y: -84 - up)
+        let shop = ButtonNode(text: "SHOP", size: CGSize(width: 145, height: 54), color: UIColor(red: 0.25, green: 0.6, blue: 0.95, alpha: 1), fontSize: 19)
+        shop.position = CGPoint(x: 0, y: -84 - up)
         shop.action = { [weak self] in
             guard let self = self else { return }
             SceneRouter.present(ShopScene(size: self.size), from: self, reveal: true)
         }
         panel.addChild(shop)
+
+        let locker = ButtonNode(text: "LOCKER", size: CGSize(width: 145, height: 54), color: UIColor(red: 0.55, green: 0.35, blue: 0.75, alpha: 1), fontSize: 19)
+        locker.position = CGPoint(x: 155, y: -84 - up)
+        locker.action = { [weak self] in
+            guard let self = self else { return }
+            SceneRouter.present(LockerScene(size: self.size), from: self, reveal: true)
+        }
+        panel.addChild(locker)
 
         overlay.setScale(0.7)
         overlay.alpha = 0

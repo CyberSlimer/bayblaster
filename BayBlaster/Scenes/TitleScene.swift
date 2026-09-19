@@ -1,7 +1,8 @@
 import SpriteKit
 
-/// Title screen: Launch, Shop, best distance, stats, mute toggle. Reuses the game's camera and
-/// background so the transition into a run feels continuous.
+/// Title screen: Launch, Daily, Shop, Locker, best distance, missions, stats, mute toggle.
+/// Reuses the game's camera and background so the transition into a run feels continuous, and
+/// shows the boat exactly as it will launch — selected rider, equipped gear, chosen launcher.
 final class TitleScene: SKScene {
 
     private let cam = GameCamera()
@@ -14,13 +15,22 @@ final class TitleScene: SKScene {
 
     private let ui = SKNode()
     private let titleLabel = SKLabelNode.make("BAY BLASTER", size: 56, font: Tuning.fontHeavy)
-    private let subtitleLabel = SKLabelNode.make("Marlow the Mackerel & the Old Lighthouse Cannon", size: 16, font: Tuning.fontMedium, color: UIColor.white.withAlphaComponent(0.85))
+    private let subtitleLabel = SKLabelNode.make("Launch something small a very long way", size: 16, font: Tuning.fontMedium, color: UIColor.white.withAlphaComponent(0.85))
     private let bestLabel = SKLabelNode.make("", size: 20, align: .left)
     private let coinsLabel = SKLabelNode.make("", size: 20, color: UIColor(red: 1, green: 0.9, blue: 0.4, alpha: 1), align: .left)
     private let statsLabel = SKLabelNode.make("", size: 13, font: Tuning.fontMedium, color: UIColor.white.withAlphaComponent(0.75))
     private var launchButton: ButtonNode!
     private var shopButton: ButtonNode!
+    private var lockerButton: ButtonNode!
+    private var dailyButton: ButtonNode!
     private var muteButton: ButtonNode!
+    private let loadoutLabel = SKLabelNode.make("", size: 13, font: Tuning.fontMedium,
+                                                color: UIColor(red: 0.8, green: 0.95, blue: 1, alpha: 1), align: .left)
+    private let prestigeLabel = SKLabelNode.make("", size: 14, font: Tuning.fontHeavy,
+                                                 color: UIColor(red: 1, green: 0.7, blue: 0.9, alpha: 1), align: .left)
+    private let dailyLabel = SKLabelNode.make("", size: 12, font: Tuning.fontMedium,
+                                              color: UIColor.white.withAlphaComponent(0.8), align: .right)
+    private let challenge = DailyChallenge.today
     private let missionsHeader = SKLabelNode.make("MISSIONS", size: 13, font: Tuning.fontHeavy,
                                                   color: UIColor(red: 1, green: 0.9, blue: 0.4, alpha: 1), align: .left)
     private var missionLabels: [SKLabelNode] = []
@@ -49,15 +59,24 @@ final class TitleScene: SKScene {
         cam.configure(sceneSize: size)
         background = Background(scene: self, camera: cam)
 
-        launcher = Launcher()
+        launcher = Launcher(kind: SaveManager.shared.data.selectedLauncherKind)
         addChild(launcher)
 
         boat = SKNode()
         let hull = Art.sprite("boat")
-        let fish = Art.sprite("fish")
-        fish.position = CGPoint(x: -4, y: 18)
+        let rider = Art.sprite(SaveManager.shared.data.selectedCrewMember.artKey)
+        rider.position = CGPoint(x: -4, y: 18)
         boat.addChild(hull)
-        boat.addChild(fish)
+        boat.addChild(rider)
+        for item in SaveManager.shared.data.equippedGearItems {
+            let node = Art.sprite(item.artKey)
+            switch item.slot {
+            case .hull:    node.position = CGPoint(x: 0, y: -14)
+            case .rig:     node.position = CGPoint(x: 2, y: 26); node.zPosition = -0.5
+            case .trinket: node.position = CGPoint(x: 22, y: 8)
+            }
+            boat.addChild(node)
+        }
         boat.position = CGPoint(x: 140, y: Tuning.waterY + 4)
         boat.zPosition = 50
         addChild(boat)
@@ -71,6 +90,9 @@ final class TitleScene: SKScene {
         ui.addChild(bestLabel)
         ui.addChild(coinsLabel)
         ui.addChild(statsLabel)
+        ui.addChild(loadoutLabel)
+        ui.addChild(prestigeLabel)
+        ui.addChild(dailyLabel)
 
         ui.addChild(missionsHeader)
         for _ in 0..<Missions.activeCount {
@@ -92,6 +114,21 @@ final class TitleScene: SKScene {
             SceneRouter.present(ShopScene(size: self.size), from: self, reveal: true)
         }
         ui.addChild(shopButton)
+
+        lockerButton = ButtonNode(text: "LOCKER", size: CGSize(width: 170, height: 50), color: UIColor(red: 0.55, green: 0.35, blue: 0.75, alpha: 1))
+        lockerButton.action = { [weak self] in
+            guard let self = self else { return }
+            SceneRouter.present(LockerScene(size: self.size), from: self, reveal: true)
+        }
+        ui.addChild(lockerButton)
+
+        dailyButton = ButtonNode(text: "DAILY", size: CGSize(width: 150, height: 46),
+                                 color: UIColor(red: 0.2, green: 0.6, blue: 0.45, alpha: 1), fontSize: 18)
+        dailyButton.action = { [weak self] in
+            guard let self = self else { return }
+            SceneRouter.present(GameScene(size: self.size, daily: self.challenge), from: self)
+        }
+        ui.addChild(dailyButton)
 
         muteButton = ButtonNode(text: "", size: CGSize(width: 56, height: 44), color: UIColor(red: 0.2, green: 0.25, blue: 0.4, alpha: 0.9), fontSize: 20)
         muteButton.action = { [weak self] in
@@ -133,8 +170,16 @@ final class TitleScene: SKScene {
         }
         muteButton.position = CGPoint(x: right - 28, y: top - 22)
 
-        launchButton.position = CGPoint(x: 0, y: compact ? -8 : 0)
-        shopButton.position = CGPoint(x: 0, y: launchButton.position.y - (compact ? 60 : 70))
+        launchButton.position = CGPoint(x: 0, y: compact ? 16 : 26)
+        // Shop and Locker sit side by side under LAUNCH; Daily gets its own row below.
+        let rowY = launchButton.position.y - (compact ? 54 : 62)
+        shopButton.position = CGPoint(x: -92, y: rowY)
+        lockerButton.position = CGPoint(x: 92, y: rowY)
+        dailyButton.position = CGPoint(x: 0, y: rowY - (compact ? 50 : 56))
+
+        loadoutLabel.position = CGPoint(x: left, y: bottom + 40)
+        prestigeLabel.position = CGPoint(x: left, y: bottom + 22)
+        dailyLabel.position = CGPoint(x: right, y: bottom + 40)
         statsLabel.position = CGPoint(x: 0, y: bottom + 4)
     }
 
@@ -152,6 +197,27 @@ final class TitleScene: SKScene {
         muteButton.text = d.muted ? "MUTED" : "SOUND"
         let s = d.stats
         statsLabel.text = "Runs \(s.totalRuns)   ·   Total \(Int(s.totalDistance)) m   ·   Longest hop \(String(format: "%.1f", s.longestFlightTime)) s   ·   Best haul \(s.bestRunCoins) coins"
+
+        // What you're about to launch with, so the title screen answers "what am I riding?".
+        let crew = d.selectedCrewMember
+        let launcher = d.selectedLauncherKind
+        let gear = d.equippedGearItems
+        let gearText = gear.isEmpty ? "no gear fitted" : gear.map { $0.displayName }.joined(separator: " + ")
+        loadoutLabel.text = "\(crew.displayName) the \(crew.species.lowercased())  ·  \(launcher.displayName)  ·  \(gearText)"
+
+        let trophies = "\(Achievements.earnedCount)/\(Achievement.allCases.count) trophies"
+        prestigeLabel.text = d.prestigeLevel > 0
+            ? "★ Cast off ×\(d.prestigeLevel)  ·  coins ×\(String(format: "%.2g", 1 + Double(d.prestigeLevel) * Double(Tuning.prestigeCoinBonusPerLevel)))  ·  \(trophies)"
+            : trophies
+
+        SaveManager.shared.refreshDaily(challenge)
+        let daily = SaveManager.shared.data
+        var dailyText = "TODAY: \(challenge.modifier.title) — \(challenge.modifier.detail)"
+        if daily.dailyBestDistance > 0 { dailyText += "   best \(Int(daily.dailyBestDistance)) m" }
+        if daily.dailyRewardClaimed { dailyText += "   ✓ claimed" }
+        if daily.dailyStreak > 0 { dailyText += "   streak \(daily.dailyStreak)" }
+        dailyLabel.text = dailyText
+        dailyButton.text = daily.dailyRewardClaimed ? "DAILY ✓" : "DAILY"
     }
 
     override func update(_ currentTime: TimeInterval) {

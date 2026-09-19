@@ -230,7 +230,7 @@ final class WorldEntity: SKNode {
 
         case .mine:
             // Risk/reward: the blast hurts but hurls the boat back into the air.
-            v.dx *= Tuning.mineSpeedMultiplier
+            if !player.ignoresHazardSlowdown { v.dx *= Tuning.mineSpeedMultiplier }
             v.dy = max(v.dy, 0) + Tuning.mineKnockUp
             player.resumeFlying()
             player.position.y = max(player.position.y, Tuning.waterY + 1)
@@ -240,7 +240,7 @@ final class WorldEntity: SKNode {
             vanish()
 
         case .jellyfish:
-            v.dy *= Tuning.jellyfishVerticalMultiplier
+            if !player.ignoresHazardSlowdown { v.dy *= Tuning.jellyfishVerticalMultiplier }
             player.velocity = v
             player.stun(seconds: Tuning.jellyfishStunSeconds)
             scene.damagePlayer(Tuning.jellyfishDamage, shake: 6)
@@ -248,20 +248,22 @@ final class WorldEntity: SKNode {
             scene.juice(.sting, at: position)
 
         case .rock:
-            v.dx *= Tuning.rockSpeedMultiplier
+            if !player.ignoresHazardSlowdown { v.dx *= Tuning.rockSpeedMultiplier }
             player.velocity = v
             scene.damagePlayer(Tuning.rockDamage, shake: 10)
             scene.juice(.hurt, at: position)
 
         case .net:
-            v.dx *= Tuning.netSpeedMultiplier
-            v.dy *= Tuning.netVerticalMultiplier
+            if !player.ignoresHazardSlowdown {
+                v.dx *= Tuning.netSpeedMultiplier
+                v.dy *= Tuning.netVerticalMultiplier
+            }
             player.velocity = v
             art.run(.sequence([.scale(to: 1.25, duration: 0.1), .scale(to: 1, duration: 0.2)]))
             scene.juice(.net, at: position)
 
         case .shark:
-            v.dx *= Tuning.sharkSpeedMultiplier
+            if !player.ignoresHazardSlowdown { v.dx *= Tuning.sharkSpeedMultiplier }
             v.dy = max(v.dy, 0) + Tuning.sharkKnockUp
             player.resumeFlying()
             player.position.y = max(player.position.y, Tuning.waterY + 1)
@@ -273,6 +275,15 @@ final class WorldEntity: SKNode {
         case .birdFlock, .stormCloud, .whirlpool:
             break
         }
+    }
+
+    /// Tock's shell soaking up a hazard before it lands. Spends the charge, removes the
+    /// entity and applies nothing at all — no damage, no speed loss, no stun.
+    func blockByShield(in scene: GameScene) {
+        guard !consumed else { return }
+        consumed = true
+        scene.juice(.blocked, at: position)
+        vanish()
     }
 
     func enterZone(player: Player) {
