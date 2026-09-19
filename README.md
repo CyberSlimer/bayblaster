@@ -9,7 +9,7 @@ iOS 17+, no third-party packages, all placeholder art is drawn in code.
 1. Open `BayBlaster.xcodeproj` in **Xcode 16 or newer** (the project uses a synchronized folder
    group, so every file under `BayBlaster/` is part of the target automatically — nothing to add).
 2. Select the **BayBlaster** target → *Signing & Capabilities* → pick your Team.
-   (`PRODUCT_BUNDLE_IDENTIFIER` is `com.example.bayblaster`; change it if you like.)
+   (`PRODUCT_BUNDLE_IDENTIFIER` is `com.cyberslimer.bayblaster`, team `5X895J3VYD` — already set.)
 3. Pick any iPhone/iPad simulator or device, press Run.
 
 Command-line build for the Simulator:
@@ -26,6 +26,12 @@ Copy the `BayBlaster/App`, `Core`, `Gameplay` and `Scenes` folders into your pro
 your `ContentView` with the one in `App/ContentView.swift`, and add
 `CADisableMinimumFrameDurationOnPhone = YES` to your Info.plist for 120 Hz. Lock the
 target to landscape in *General → Deployment Info*.
+
+## Play on your iPhone / TestFlight
+
+See `docs/DEVICE_AND_TESTFLIGHT.md`. Short version: plug the phone in and run
+`Tools/ship.sh device`; for TestFlight create the App Store Connect record once, then
+`Tools/ship.sh testflight`.
 
 ## Where things live
 

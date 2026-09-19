@@ -44,7 +44,11 @@ Added 2026-09-18 (Mac session), aimed at the genre's retention hooks:
    - Skip window: `skipMaxAngleDegrees` (42°) — if skips feel too rare/easy, move this first.
    - Entity contact radii in `EntityKind.spec` vs the baked placeholder textures.
    - Audio levels in `AudioManager.render` (all synthesized; tweak `amp`).
-3. **120 Hz check.** `CADisableMinimumFrameDurationOnPhone` is in `Info.plist`; confirm
+3. **TestFlight**: pipeline is done (`Tools/ship.sh testflight`, `ExportOptions.plist`,
+   placeholder icon). Blocked only on creating the App Store Connect app record for
+   `com.cyberslimer.bayblaster` — steps in `docs/DEVICE_AND_TESTFLIGHT.md`. The upload was
+   attempted on 2026-09-18 and got as far as `missingApp`, so the account/team side works.
+4. **120 Hz check.** `CADisableMinimumFrameDurationOnPhone` is in `Info.plist`; confirm
    `SpriteView(preferredFramesPerSecond: 120)` actually reports 120 on a ProMotion device.
 
 ## Pacing targets (sim, median of 300 runs)

@@ -19,6 +19,12 @@ Lighthouse Cannon. See README.md for the file map and HANDOFF.md for current sta
   anything in `Tuning` that affects distance, mirror it in `sim.py` and re-run
   `python3 Tools/sim.py` so the pacing table stays honest.
 
+## Device / TestFlight
+
+`Tools/ship.sh device` (plugged-in iPhone) and `Tools/ship.sh testflight` (archive + upload).
+Team 5X895J3VYD is paid (Xcode's cached "Personal Team" label is stale). Details and the
+one-time App Store Connect setup: `docs/DEVICE_AND_TESTFLIGHT.md`.
+
 ## Build
 
 ```bash
