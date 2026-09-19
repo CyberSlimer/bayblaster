@@ -842,9 +842,10 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             }
         }
 
+        // Three buttons across a 480-wide panel: 145 each with 10 pt gaps, centred at ±155/0.
         let againDaily = daily
-        let again = ButtonNode(text: "LAUNCH AGAIN", size: CGSize(width: 190, height: 54), color: UIColor(red: 0.95, green: 0.45, blue: 0.2, alpha: 1), fontSize: 20)
-        again.position = CGPoint(x: -150, y: -84 - up)
+        let again = ButtonNode(text: "LAUNCH AGAIN", size: CGSize(width: 145, height: 54), color: UIColor(red: 0.95, green: 0.45, blue: 0.2, alpha: 1), fontSize: 17)
+        again.position = CGPoint(x: -155, y: -84 - up)
         again.action = { [weak self] in
             guard let self = self else { return }
             // Re-running a daily stays on the daily; the bay is the same all day.
@@ -852,7 +853,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
         panel.addChild(again)
 
-        let shop = ButtonNode(text: "SHOP", size: CGSize(width: 130, height: 54), color: UIColor(red: 0.25, green: 0.6, blue: 0.95, alpha: 1), fontSize: 20)
+        let shop = ButtonNode(text: "SHOP", size: CGSize(width: 145, height: 54), color: UIColor(red: 0.25, green: 0.6, blue: 0.95, alpha: 1), fontSize: 19)
         shop.position = CGPoint(x: 0, y: -84 - up)
         shop.action = { [weak self] in
             guard let self = self else { return }
@@ -860,8 +861,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
         panel.addChild(shop)
 
-        let locker = ButtonNode(text: "LOCKER", size: CGSize(width: 150, height: 54), color: UIColor(red: 0.55, green: 0.35, blue: 0.75, alpha: 1), fontSize: 20)
-        locker.position = CGPoint(x: 140, y: -84 - up)
+        let locker = ButtonNode(text: "LOCKER", size: CGSize(width: 145, height: 54), color: UIColor(red: 0.55, green: 0.35, blue: 0.75, alpha: 1), fontSize: 19)
+        locker.position = CGPoint(x: 155, y: -84 - up)
         locker.action = { [weak self] in
             guard let self = self else { return }
             SceneRouter.present(LockerScene(size: self.size), from: self, reveal: true)

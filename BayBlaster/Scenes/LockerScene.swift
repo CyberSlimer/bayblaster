@@ -1,3 +1,4 @@
+import Foundation
 import SpriteKit
 
 // =====================================================================================
@@ -27,13 +28,15 @@ final class LockerScene: SKScene {
             }
         }
 
-        /// Cards per page, as (columns, rows). Gear is 3×3 so each row is one slot.
+        /// Cards per page, as (columns, rows). Never more than two rows: on a landscape
+        /// phone (~393 pt tall) a third row leaves each card too short to show its own
+        /// description, which is the whole point of the card.
         var grid: (columns: Int, rows: Int) {
             switch self {
             case .crew:      return (4, 2)
-            case .gear:      return (3, 3)
+            case .gear:      return (5, 2)
             case .launchers: return (4, 1)
-            case .trophies:  return (4, 3)
+            case .trophies:  return (5, 2)
             }
         }
     }
@@ -52,6 +55,8 @@ final class LockerScene: SKScene {
         let dimmed: Bool             // can't afford it, or locked
         let action: (() -> Void)?
     }
+
+    private static let tabWidth: CGFloat = 104
 
     private var tab: Tab = .crew
     private var page = 0
@@ -121,8 +126,8 @@ final class LockerScene: SKScene {
         addChild(shopButton)
 
         for t in Tab.allCases {
-            let b = ButtonNode(text: t.title, size: CGSize(width: 132, height: 38),
-                               color: UIColor(red: 0.2, green: 0.3, blue: 0.5, alpha: 1), fontSize: 15)
+            let b = ButtonNode(text: t.title, size: CGSize(width: LockerScene.tabWidth, height: 36),
+                               color: UIColor(red: 0.2, green: 0.3, blue: 0.5, alpha: 1), fontSize: 14)
             b.action = { [weak self] in self?.select(tab: t) }
             tabButtons.append(b)
             addChild(b)
@@ -178,24 +183,30 @@ final class LockerScene: SKScene {
         backButton.position = CGPoint(x: left + 58 + title.frame.width + 26, y: top - 18)
         shopButton.position = CGPoint(x: backButton.position.x + 130, y: top - 18)
 
-        // Tab row, centred.
-        let tabWidth: CGFloat = 132, tabGap: CGFloat = 8
-        let totalTabs = CGFloat(tabButtons.count) * tabWidth + CGFloat(tabButtons.count - 1) * tabGap
-        var tx = -totalTabs / 2 + tabWidth / 2
+        // Tab row, left-aligned so it never runs under the page controls on the right.
+        // ButtonNode bakes its background path at init, so the width is fixed rather than
+        // fitted to the screen; 104 × 4 plus the page controls fits the narrowest landscape
+        // phone we support.
+        let tabGap: CGFloat = 8
+        var tx = left + LockerScene.tabWidth / 2
         for (i, b) in tabButtons.enumerated() {
             b.position = CGPoint(x: tx, y: top - 56)
             let active = i == tab.rawValue
             b.setColor(active ? UIColor(red: 0.95, green: 0.6, blue: 0.2, alpha: 1)
                               : UIColor(red: 0.2, green: 0.3, blue: 0.5, alpha: 1))
-            tx += tabWidth + tabGap
+            tx += LockerScene.tabWidth + tabGap
         }
 
-        hintLabel.position = CGPoint(x: 0, y: bottom + 14)
-        pageLabel.position = CGPoint(x: 0, y: bottom + 34)
-        prevButton.position = CGPoint(x: -84, y: bottom + 34)
-        nextButton.position = CGPoint(x: 84, y: bottom + 34)
+        // Page controls ride in the tab row, and the hint sits just under it, so everything
+        // below belongs to the grid.
+        prevButton.position = CGPoint(x: right - 118, y: top - 56)
+        pageLabel.position = CGPoint(x: right - 76, y: top - 56)
+        nextButton.position = CGPoint(x: right - 34, y: top - 56)
+        hintLabel.position = CGPoint(x: 0, y: top - 84)
 
-        rebuildCards(in: CGRect(x: left, y: bottom + 54, width: right - left, height: (top - 78) - (bottom + 54)))
+        let gridTop = top - 98
+        let gridBottom = bottom + 6
+        rebuildCards(in: CGRect(x: left, y: gridBottom, width: right - left, height: max(80, gridTop - gridBottom)))
         refreshChrome()
     }
 
@@ -370,6 +381,9 @@ final class LockerScene: SKScene {
 /// One tappable card in the locker grid. Rebuilt whenever the tab, page or save changes,
 /// so it is deliberately cheap and stateless.
 private final class LockerCard: SKNode {
+    /// Below this card height the compact layout kicks in.
+    private static let compactHeight: CGFloat = 150
+
     private let action: (() -> Void)?
     private let background: SKShapeNode
     private var tracking = false
@@ -390,44 +404,50 @@ private final class LockerCard: SKNode {
         background.lineWidth = spec.highlighted ? 2.5 : 1.5
         addChild(background)
 
-        // Lay the card out top-down with a cursor, reserving the status row at the bottom.
-        // Card heights vary a lot between tabs (launchers get one tall row, trophies get
-        // three short ones), so anything that doesn't fit is dropped rather than overlapped.
-        let statusRowHeight: CGFloat = 20
-        let usable = size.height - statusRowHeight - 12
-        var cursor = size.height / 2 - 8
+        // Two layouts. A landscape phone only gives each card ~110 pt of height, which the
+        // full layout spends entirely on chrome — so below `compactHeight` the subtitle moves
+        // down to share the bottom row with the status, and the type shrinks, which buys back
+        // the two lines of description that are the whole reason the card exists.
+        let compact = size.height < LockerCard.compactHeight
+        let bottomRow: CGFloat = compact ? 16 : 20
+        let inset: CGFloat = 8
+        var cursor = size.height / 2 - (compact ? 6 : 8)
 
-        let iconBox = min(size.width * 0.34, usable * 0.34)
+        let iconBox = compact ? min(size.width * 0.26, 28)
+                              : min(size.width * 0.34, (size.height - bottomRow - 12) * 0.34)
         let icon = Art.sprite(spec.artKey)
-        let natural = max(icon.calculateAccumulatedFrame().width,
-                          icon.calculateAccumulatedFrame().height, 1)
+        let iconFrame = icon.calculateAccumulatedFrame()
+        let natural = max(iconFrame.width, iconFrame.height, 1)
         icon.setScale(min(1.6, iconBox / natural))
         cursor -= iconBox / 2
         icon.position = CGPoint(x: 0, y: cursor)
         addChild(icon)
-        cursor -= iconBox / 2 + 10
+        cursor -= iconBox / 2 + (compact ? 5 : 10)
 
-        let titleSize = min(16, max(11, size.width * 0.105))
+        let titleSize: CGFloat = compact ? 13 : min(16, max(11, size.width * 0.105))
         let titleLabel = SKLabelNode.make(spec.title, size: titleSize, font: Tuning.fontHeavy)
         cursor -= titleSize / 2
         titleLabel.position = CGPoint(x: 0, y: cursor)
         addChild(titleLabel)
-        cursor -= titleSize / 2 + 5
+        cursor -= titleSize / 2 + 4
 
-        let subtitleLabel = SKLabelNode.make(spec.subtitle, size: 10.5, font: Tuning.fontMedium,
-                                             color: UIColor.white.withAlphaComponent(0.6))
-        cursor -= 6
-        subtitleLabel.position = CGPoint(x: 0, y: cursor)
-        addChild(subtitleLabel)
-        cursor -= 12
+        if !compact {
+            let subtitleLabel = SKLabelNode.make(spec.subtitle, size: 10.5, font: Tuning.fontMedium,
+                                                 color: UIColor.white.withAlphaComponent(0.6))
+            cursor -= 6
+            subtitleLabel.position = CGPoint(x: 0, y: cursor)
+            addChild(subtitleLabel)
+            cursor -= 12
+        }
 
         // Named `bottomLimit`, not `floor`: a local constant called `floor` shadows the
         // stdlib function of the same name.
-        let bottomLimit = -size.height / 2 + statusRowHeight + 8
-        let charWidth = size.width / 6.0     // ≈ the width of one 11.5pt character
+        let bottomLimit = -size.height / 2 + bottomRow + 6
+        let detailSize: CGFloat = compact ? 10.5 : 11.5
+        let charWidth = max(8, Int(size.width / (detailSize * 0.52)))
 
         func addLines(_ text: String, size fontSize: CGFloat, colour: UIColor, maxLines: Int) {
-            for line in LockerCard.wrap(text, width: Int(charWidth), maxLines: maxLines) {
+            for line in LockerCard.wrap(text, width: charWidth, maxLines: maxLines) {
                 guard cursor - fontSize >= bottomLimit else { return }
                 cursor -= fontSize
                 let l = SKLabelNode.make(line, size: fontSize, font: Tuning.fontMedium, color: colour)
@@ -437,15 +457,27 @@ private final class LockerCard: SKNode {
             }
         }
 
-        addLines(spec.detail, size: 11.5, colour: UIColor(red: 0.8, green: 0.95, blue: 1, alpha: 1), maxLines: 3)
-        if let footnote = spec.footnote {
+        addLines(spec.detail, size: detailSize,
+                 colour: UIColor(red: 0.8, green: 0.95, blue: 1, alpha: 1), maxLines: compact ? 2 : 3)
+        if let footnote = spec.footnote, !compact {
             cursor -= 3
             addLines(footnote, size: 10, colour: UIColor.white.withAlphaComponent(0.5), maxLines: 2)
         }
 
-        let status = SKLabelNode.make(spec.status, size: 14, font: Tuning.fontHeavy, color: spec.statusColor)
-        status.position = CGPoint(x: 0, y: -size.height / 2 + 13)
+        let status = SKLabelNode.make(spec.status, size: compact ? 12 : 14, font: Tuning.fontHeavy,
+                                      color: spec.statusColor,
+                                      align: compact ? .right : .center)
+        status.position = compact ? CGPoint(x: size.width / 2 - inset, y: -size.height / 2 + 11)
+                                  : CGPoint(x: 0, y: -size.height / 2 + 13)
         addChild(status)
+
+        if compact {
+            // The subtitle (species / slot / ritual) shares the bottom row with the status.
+            let sub = SKLabelNode.make(spec.subtitle, size: 9, font: Tuning.fontMedium,
+                                       color: UIColor.white.withAlphaComponent(0.55), align: .left)
+            sub.position = CGPoint(x: -size.width / 2 + inset, y: -size.height / 2 + 11)
+            addChild(sub)
+        }
 
         alpha = spec.dimmed ? 0.5 : 1
         isUserInteractionEnabled = action != nil
@@ -472,7 +504,12 @@ private final class LockerCard: SKNode {
             }
         }
         if !current.isEmpty { lines.append(current) }
-        return Array(lines.prefix(maxLines))
+        if lines.count > maxLines {
+            var kept = Array(lines.prefix(maxLines))
+            kept[maxLines - 1] += "…"
+            return kept
+        }
+        return lines
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -485,7 +522,12 @@ private final class LockerCard: SKNode {
         tracking = false
         run(.scale(to: 1, duration: 0.08))
         let p = t.location(in: self)
-        if abs(p.x) <= cardSize.width / 2 && abs(p.y) <= cardSize.height / 2 { action?() }
+        guard abs(p.x) <= cardSize.width / 2, abs(p.y) <= cardSize.height / 2 else { return }
+        // The action rebuilds the whole grid, which removes this very node from its parent.
+        // Doing that synchronously would free `self` while its own touch handler is still on
+        // the stack, so hop to the next run loop first.
+        let pending = action
+        DispatchQueue.main.async { pending?() }
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
