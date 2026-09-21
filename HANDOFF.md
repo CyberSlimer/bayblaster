@@ -1,5 +1,85 @@
 # Handoff — resume on the Mac
 
+## ▶ START HERE — next session, on a Mac with Xcode
+
+Two jobs, in order. Everything below this section is background; you do not need it unless
+something breaks.
+
+### Job 1 — make it compile
+
+```bash
+git checkout claude/game-expansion-unlockables-wlcezz
+git pull
+xcodebuild -project BayBlaster.xcodeproj -scheme BayBlaster \
+  -destination 'generic/platform=iOS Simulator' build 2>&1 \
+  | tee /tmp/bb-build.log | grep -E "(error|warning):" | sort -u
+```
+
+The branch carries the **"smash" update** — roughly 1,000 lines written on Linux with no Swift
+toolchain, which no compiler has seen. The locker update underneath it already built clean.
+
+Fix whatever comes back, then rebuild until there are **zero errors and zero warnings** — this
+project has held zero warnings since the first build and that is worth keeping.
+
+Where the unseen code lives, in rough order of risk:
+
+| File | What is new |
+|---|---|
+| `Gameplay/Entities.swift` | `.barrier` — the only kind with a *rectangular* body; brick stacking in `init`, smash/reject logic in `apply` |
+| `Gameplay/WorldSpawner.swift` | three spawn tracks (low / high-air / barrier) and a `pick` that takes a weight selector |
+| `Gameplay/Background.swift` | `update` gained an `altitude:` parameter (defaulted, so old call sites still compile) |
+| `Gameplay/Launcher.swift` | charge glow, muzzle smoke, shockwave |
+| `Gameplay/Player.swift` | `tumble(turns:seconds:)` and `jetStreamZones` |
+| `Scenes/GameScene.swift` | launch sequence, `debris`, `flash`, four new `JuiceKind` cases |
+| `Core/Art.swift` | 8 new placeholder drawings |
+
+Two known error shapes, both already swept for — mentioned so you recognise them:
+
+- **`Int`/`Double` mixing.** The locker branch's single compile error was
+  `CGFloat(5.5 + i * 3)`. The correct spelling is `CGFloat(i * 3) + 5.5`. I found none of
+  that shape in the new code, but the placeholder drawings are full of loop-index arithmetic.
+- **"unable to type-check this expression in reasonable time."** Deeply nested `SKAction`
+  literals cause this. I hoisted the two worst into named locals; if a third turns up, do the
+  same rather than trying to simplify the expression in place.
+
+Then sanity-check in the Simulator: a wall should read as breakable *before* you reach it,
+a sky gate should feel fair rather than cheap, and the launch whiteout should not be painful.
+
+### Job 2 — TestFlight
+
+**Blocked on a browser step that has never been done.** `xcodebuild` can upload but cannot
+create the App Store Connect record, and an earlier attempt failed with `missingApp` for
+exactly this reason. Whoever owns the Apple ID must, once:
+
+1. Register the bundle id — https://developer.apple.com/account/resources/identifiers/list
+   → **+** → App IDs → App → Description `Bay Blaster`, Bundle ID **Explicit**
+   `com.cyberslimer.bayblaster`. No capabilities.
+2. Create the app — https://appstoreconnect.apple.com/apps → **+ New App** → iOS,
+   name **Bay Blaster**, English (U.S.), that bundle id, SKU `bayblaster`, Full Access.
+
+Then, only once Job 1 is clean:
+
+```bash
+Tools/ship.sh testflight
+```
+
+Archives Release, exports via `ExportOptions.plist` (build number auto-increments), uploads.
+It appears under TestFlight after 5–15 minutes of processing; add yourself to an internal
+group for install without review. Export compliance: the app uses no encryption, answer
+**No** — or add `ITSAppUsesNonExemptEncryption = NO` to `Info.plist` to stop being asked.
+
+Failure modes are listed at the bottom of `docs/DEVICE_AND_TESTFLIGHT.md`.
+
+### Do not
+
+- Re-tune balance. It was measured with `Tools/sim.py`, the numbers are in the pacing table
+  below, and changing a `Tuning` constant without re-running the sim makes that table a lie.
+- Hand-edit the `.pbxproj` file list. The target uses a synchronized folder group; new files
+  under `BayBlaster/` join automatically.
+
+---
+
+
 ## What exists
 
 Complete v1 of the game as specified: title / aim / flight / results / shop, water-skip
