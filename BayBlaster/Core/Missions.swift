@@ -10,7 +10,7 @@ import Foundation
 /// What a mission counts. Every kind is measured over a single run.
 enum MissionKind: String, Codable, CaseIterable {
     case distance, skips, combo, perfect, coins, dolphins, buoys, whales, balloons, mines, rockets, untouched
-    case abilities, cleanHull
+    case abilities, cleanHull, smashed, altitude
 
     /// Target per difficulty level 0…5.
     var targets: [Int] {
@@ -29,13 +29,15 @@ enum MissionKind: String, Codable, CaseIterable {
         case .untouched: return [1, 1, 1, 1, 1, 1]
         case .abilities: return [2, 3, 4, 6, 8, 10]
         case .cleanHull: return [200, 400, 700, 1100, 1700, 2600]   // metres, finishing at full hull
+        case .smashed:   return [1, 2, 3, 5, 7, 10]
+        case .altitude:  return [60, 100, 160, 240, 340, 500]        // metres above the water
         }
     }
 
     /// Lowest level at which this kind is offered (perfects and "untouched" need some skill).
     var minLevel: Int {
         switch self {
-        case .perfect, .untouched, .mines, .cleanHull: return 1
+        case .perfect, .untouched, .mines, .cleanHull, .altitude: return 1
         default: return 0
         }
     }
@@ -57,6 +59,8 @@ enum MissionKind: String, Codable, CaseIterable {
         case .untouched: return "Finish a run without hitting a hazard"
         case .abilities: return "Use your ability \(target) times in one run"
         case .cleanHull: return "Fly \(target) m and finish at full hull"
+        case .smashed:   return "Smash \(target) \(s(target, "wall", "walls")) in one run"
+        case .altitude:  return "Reach \(target) m above the water"
         }
     }
 
@@ -77,6 +81,8 @@ enum MissionKind: String, Codable, CaseIterable {
         case .untouched: return run.hazardsHit == 0 && run.distance > 0 ? 1 : 0
         case .abilities: return run.abilitiesUsed
         case .cleanHull: return run.endHullFraction >= 1 ? Int(run.distance) : 0
+        case .smashed:   return run.barriersSmashed
+        case .altitude:  return Int(run.peakAltitude)
         }
     }
 }
@@ -119,6 +125,8 @@ struct RunStats {
     var abilitiesUsed = 0             // times the rider's ability was fired
     var endHullFraction: Double = 1   // 1 = finished without a scratch
     var isDaily = false               // this run was a daily challenge
+    var barriersSmashed = 0           // breakable walls broken through
+    var peakAltitude: Double = 0      // highest point of the run, in metres above the water
 }
 
 /// Outcome of checking one mission against a run.

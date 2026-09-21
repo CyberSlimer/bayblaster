@@ -3,6 +3,13 @@ import SpriteKit
 /// Parallax sky / shoreline / clouds / water. The sky, sun, moon and stars are camera children
 /// (screen-fixed); clouds, shoreline and water live in the world and are re-positioned around
 /// the camera every frame with parallax factors.
+///
+/// Two independent things drive the look:
+///   · DISTANCE runs the day → dusk → night cycle (`Tuning.dayNightMeters`)
+///   · ALTITUDE runs the climb toward space: the sky darkens, the stars come out whatever the
+///     time of day, the low cloud deck falls away beneath you and a cirrus deck appears above.
+/// Before this, everything was distance-driven only, so a launch that cleared the low cloud
+/// deck flew through a flat field of blue with nothing to mark the climb.
 final class Background {
 
     // Implicitly unwrapped so the initializer can build the scene graph in one pass.
@@ -13,11 +20,18 @@ final class Background {
     private let moon = SKShapeNode(circleOfRadius: 20)
     private let stars = SKNode()
 
+    private var spaceSky: SKSpriteNode!
+
     private let cloudLayer = SKNode()
     private var clouds: [SKNode] = []
     private var cloudInfo: [(baseX: CGFloat, baseY: CGFloat, drift: CGFloat)] = []
     private let cloudTileWidth: CGFloat = 2400
     private let cloudAltitude: CGFloat = 520
+
+    /// The cirrus deck you climb through on a big launch.
+    private let highCloudLayer = SKNode()
+    private var highClouds: [SKNode] = []
+    private var highCloudInfo: [(baseX: CGFloat, drift: CGFloat)] = []
 
     private let shoreLayer = SKNode()
     private var shoreTileWidth: CGFloat = 1800     // replaced by the generated tile's real width
@@ -48,6 +62,14 @@ final class Background {
         }
         duskSky.alpha = 0
         nightSky.alpha = 0
+
+        // The "up there" sky: near-black overhead fading to thin blue at the horizon. Blended
+        // in by altitude on top of whatever the time of day is doing.
+        spaceSky = SKSpriteNode(texture: Art.gradientTexture(top: UIColor(red: 0.01, green: 0.01, blue: 0.05, alpha: 1),
+                                                             bottom: UIColor(red: 0.16, green: 0.34, blue: 0.62, alpha: 1), key: "__skySpace"), size: big)
+        spaceSky.zPosition = -996
+        spaceSky.alpha = 0
+        camera.addChild(spaceSky)
 
         sun.fillColor = UIColor(red: 1, green: 0.93, blue: 0.55, alpha: 1)
         sun.strokeColor = UIColor(red: 1, green: 0.85, blue: 0.3, alpha: 0.6)
@@ -87,6 +109,19 @@ final class Background {
                               drift: CGFloat.random(in: 6...20)))
             cloudLayer.addChild(c)
             clouds.append(c)
+        }
+
+        // High cirrus deck (world space, parallax 0.12 — nearly fixed, so it reads as far away)
+        highCloudLayer.zPosition = -910
+        highCloudLayer.alpha = 0
+        scene.addChild(highCloudLayer)
+        for i in 0..<6 {
+            let c = Art.sprite("cirrus")
+            c.setScale(CGFloat.random(in: 0.8...1.7))
+            highCloudInfo.append((baseX: CGFloat(i) * (cloudTileWidth / 6) + CGFloat.random(in: -160...160),
+                                  drift: CGFloat.random(in: 2...8)))
+            highCloudLayer.addChild(c)
+            highClouds.append(c)
         }
 
         // Distant shoreline (world space, parallax 0.55)
@@ -167,24 +202,32 @@ final class Background {
         self.sceneSize = sceneSize
     }
 
-    func update(camera: GameCamera, distanceMetres: CGFloat, dt: CGFloat) {
+    /// `altitude` is the boat's height above the water in world points — it drives everything
+    /// that makes a climb feel like a climb.
+    func update(camera: GameCamera, distanceMetres: CGFloat, altitude: CGFloat = 0, dt: CGFloat) {
         let camX = camera.position.x
         let camY = camera.position.y
         let night = clamp(distanceMetres / Tuning.dayNightMeters, 0, 1)
+        let high = clamp((altitude - Tuning.skySpaceStartHeight)
+                         / max(1, Tuning.skySpaceFullHeight - Tuning.skySpaceStartHeight), 0, 1)
 
         // Sky blend: day → dusk (0…0.5) → night (0.5…1)
         duskSky.alpha = night < 0.5 ? night * 2 : 1
         nightSky.alpha = max(0, (night - 0.5) * 2)
-        stars.alpha = max(0, (night - 0.6) * 2.5)
+        // Space wins over the time of day: high enough and it is dark whatever the hour.
+        spaceSky.alpha = high
+        // Stars from either cause, whichever is stronger.
+        stars.alpha = max(max(0, (night - 0.6) * 2.5), high * 0.95)
         shoreTint.alpha = night * 0.7
         waterNight.alpha = night * 0.85
 
         // Sun sets, moon rises (screen-fixed)
         let w = sceneSize.width, h = sceneSize.height
         sun.position = CGPoint(x: w * 0.3, y: lerp(h * 0.32, -h * 0.6, night))
-        sun.alpha = 1 - max(0, (night - 0.4) * 2)
-        moon.position = CGPoint(x: w * 0.34, y: lerp(-h * 0.6, h * 0.3, night))
-        moon.alpha = max(0, (night - 0.35) * 2)
+        sun.alpha = (1 - max(0, (night - 0.4) * 2)) * (1 - high * 0.25)
+        // The moon comes out as you climb too, not only as the day runs out.
+        moon.position = CGPoint(x: w * 0.34, y: lerp(-h * 0.6, h * 0.3, max(night, high * 0.85)))
+        moon.alpha = max(max(0, (night - 0.35) * 2), high)
 
         // Clouds: parallax 0.25 with slow drift, wrap around a tile
         wavePhase += dt
@@ -193,7 +236,21 @@ final class Background {
             var lx = (info.baseX - camX * 0.25 - wavePhase * info.drift).truncatingRemainder(dividingBy: cloudTileWidth)
             if lx < 0 { lx += cloudTileWidth }
             c.position = CGPoint(x: lx - cloudTileWidth / 2, y: info.baseY)
-            c.alpha = lerp(0.9, 0.35, night)
+            // Thin out the low deck once you are above it, so it reads as being left behind.
+            c.alpha = lerp(0.9, 0.35, night) * (1 - high * 0.85)
+        }
+
+        // Cirrus deck: barely any parallax, and only visible once you are climbing into it.
+        highCloudLayer.alpha = clamp((altitude - Tuning.highAirStartHeight * 0.4)
+                                     / max(1, Tuning.highCloudAltitude), 0, 1) * lerp(0.85, 0.4, night)
+        highCloudLayer.position = CGPoint(x: camX,
+                                          y: Tuning.waterY + Tuning.highCloudAltitude
+                                             - (camY - Tuning.waterY) * Tuning.highCloudParallax)
+        for (c, info) in zip(highClouds, highCloudInfo) {
+            var lx = (info.baseX - camX * Tuning.highCloudParallax - wavePhase * info.drift)
+                .truncatingRemainder(dividingBy: cloudTileWidth)
+            if lx < 0 { lx += cloudTileWidth }
+            c.position = CGPoint(x: lx - cloudTileWidth / 2, y: 0)
         }
 
         // Shoreline: parallax 0.55, sits on the horizon just above the water line

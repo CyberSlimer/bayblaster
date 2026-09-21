@@ -49,6 +49,20 @@ See `docs/DEVICE_AND_TESTFLIGHT.md`. Short version: plug the phone in and run
 `Tools/ship.sh device`; for TestFlight create the App Store Connect record once, then
 `Tools/ship.sh testflight`.
 
+## What's in the bay
+
+Twenty-one kinds of thing spawn on three independent tracks:
+
+- **Low track** (water level to ~90 m): buoys, whale spouts, outboard motors, coin bags, fuel
+  cans, dolphins, balloons, coin arcs, supply crates, boost rings — and rocks, nets, sharks,
+  storm clouds, sea mines, jellyfish and whirlpools.
+- **High-air track** (90–300 m): blimps to bounce off, boost rings, jet streams that carry you,
+  plus gull flocks and storm clouds at altitude. Before this existed, a big launch flew through
+  an empty blue field.
+- **Barrier track**: breakable walls at a steady cadence. Fast enough and you smash through for
+  coins; too slow and it stops you dead. One wall in four is a sky gate tall enough to catch a
+  launch that would sail over everything else. Plank / stone / iron tells you how hard it is.
+
 ## Where things live
 
 | Area | File |
@@ -68,12 +82,12 @@ See `docs/DEVICE_AND_TESTFLIGHT.md`. Short version: plug the phone in and run
 | Boat, hull, rockets, gravity/drag integration | `Gameplay/Player.swift` |
 | Skip-vs-plow water resolution | `Gameplay/WaterSkipSystem.swift` |
 | Boost / hazard definitions and effects | `Gameplay/Entities.swift` |
-| Procedural spawning, coin arcs, hazard spacing | `Gameplay/WorldSpawner.swift` |
+| Spawning: low track, high-air track, barrier track | `Gameplay/WorldSpawner.swift` |
 | Distance flags + "your best" flag | `Gameplay/Milestones.swift` |
 | Camera lead / zoom / shake | `Gameplay/GameCamera.swift` |
 | Aim phase: all four launchers | `Gameplay/Launcher.swift` |
 | In-flight HUD, floating labels | `Gameplay/HUD.swift` |
-| Parallax sky, day→night, shoreline, water | `Gameplay/Background.swift` |
+| Parallax sky, day→night, climb→space, shoreline, water | `Gameplay/Background.swift` |
 | Title / Game / Shop / Locker scenes | `Scenes/` |
 | Pacing simulation used to tune Constants | `Tools/sim.py` |
 
@@ -85,7 +99,9 @@ placeholder uses (the boat's waterline, the cannon's pivot, etc.).
 
 - **World**: `boat`, `buoy`, `whaleSpout`, `motor`, `birdFlock`, `coinBag`, `fuelCan`, `coin`,
   `dolphin`, `balloon`, `rock`, `net`, `shark`, `stormCloud`, `mine`, `jellyfish`, `whirlpool`,
-  `flag`, `bestFlag`, `cloud`
+  `flag`, `bestFlag`, `cloud`, `cirrus`
+- **Smashables and the high air**: `barrierWood`, `barrierStone`, `barrierIron` (one brick each,
+  64×64 — a wall stacks them), `crate`, `blimp`, `boostRing`, `jetStream`
 - **Riders**: `fish` (Marlow — the original key, kept so an existing PNG still works),
   `crewBristle`, `crewNixie`, `crewGilly`, `crewBruno`, `crewTock`, `crewPip`, `crewChum`.
   Draw them all to Marlow's footprint (~34×18, origin at the belly) so the swap doesn't move

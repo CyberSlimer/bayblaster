@@ -197,6 +197,35 @@ def resolve(tiers, crew='marlow', gear=(), prestige=0, daily=None, launcher='can
     )
 
 
+# ---------------------------------------------------------------- barriers (breakable walls)
+BARRIER_START_M = 120
+BARRIER_INTERVAL_M = (240, 420)
+BARRIER_BLOCK = 64
+BARRIER_BLOCKS = (4, 12)
+BARRIER_TALL_CHANCE = 0.25        # …and one wall in four is a towering sky gate
+BARRIER_TALL_BLOCKS = (14, 26)
+BARRIER_BASE_TOUGH = 380
+BARRIER_TOUGH_PER_M = 0.18
+BARRIER_MAX_TOUGH = 1400
+BARRIER_SMASH_KEEP = 0.94
+BARRIER_SMASH_COINS = 9
+BARRIER_BOUNCE_MULT = 0.18
+BARRIER_BOUNCE_BACK = 46
+BARRIER_DAMAGE = 12
+
+# ---------------------------------------------------------------- the high air
+HIGH_START_H, HIGH_TOP_H = 900, 3000
+HIGH_SPAWN_START_M = 60
+HIGH_SPAWN_INTERVAL_M = (90, 170)
+CRATE_COINS, CRATE_KEEP = 30, 0.97
+BLIMP_UP, BLIMP_KEEP, BLIMP_FWD = 760, 0.35, 120
+RING_SPEED, RING_COINS = 420, 20
+JET_PUSH, JET_LIFT = 900, 90
+
+# kind -> high-air weight
+HIGH_AIR = {'blimp': 24, 'ring': 26, 'jet': 18, 'balloon': 20, 'birds': 22, 'cloud': 14}
+HIGH_UNLOCK_M = {'blimp': 400, 'jet': 900, 'ring': 80}
+
 BOOSTS = {
     'buoy':    dict(w=30, y=(0, 0), r=28,  ),
     'whale':   dict(w=12, y=(0, 0), r=40),
@@ -206,6 +235,8 @@ BOOSTS = {
     'fuel':    dict(w=10, y=(30, 300), r=24),
     'dolphin': dict(w=14, y=(0, 0), r=38),
     'balloon': dict(w=12, y=(200, 650), r=34),
+    'crate':   dict(w=14, y=(0, 220), r=26),
+    'ring':    dict(w=10, y=(200, 1800), r=44),
 }
 HAZ = {
     'rock':  dict(w=35, y=(0, 0), r=34),
@@ -217,8 +248,9 @@ HAZ = {
     'whirl': dict(w=15, y=(0, 0), r=90),
 }
 WATER_HAZ = {'rock', 'net', 'shark', 'mine', 'whirl'}
-UNLOCK_M = {'shark': 150, 'balloon': 200, 'jelly': 250, 'cloud': 300, 'dolphin': 300, 'mine': 400, 'whirl': 700}
-ZONES = {'birds', 'cloud', 'whirl'}
+UNLOCK_M = {'shark': 150, 'balloon': 200, 'jelly': 250, 'cloud': 300, 'dolphin': 300, 'mine': 400,
+            'whirl': 700, 'ring': 80, 'blimp': 400, 'jet': 900}
+ZONES = {'birds', 'cloud', 'whirl', 'jet'}
 
 def pick(table, metres=1e9):
     table = {k: v for k, v in table.items() if UNLOCK_M.get(k, 0) <= metres}
@@ -263,7 +295,12 @@ def run(tiers, player_skill=0.6, crew='marlow', gear=(), prestige=0, daily=None,
     t = 0.0
     diving = False
     next_spawn = 400.0
+    next_high = HIGH_SPAWN_START_M * PPM
+    next_wall = BARRIER_START_M * PPM
     ents = []
+    walls = []            # [x, height, toughness, broken]
+    smashed = 0
+    prev_x = 0.0
     skips = 0
     hazards_hit = 0
     zone = None
@@ -316,6 +353,34 @@ def run(tiers, player_skill=0.6, crew='marlow', gear=(), prestige=0, daily=None,
             last_water_haz = k in WATER_HAZ
             ents.append([next_spawn, random.uniform(*spec['y']), spec['r'], k, is_h, False])
             next_spawn += random.uniform(*SPAWN_INTERVAL_M) * PPM / density
+
+        # high-air track: fills the sky above HIGH_START_H, which used to be empty
+        while next_high < x + 6000:
+            d_m = next_high / PPM
+            pool = {k: w for k, w in HIGH_AIR.items() if HIGH_UNLOCK_M.get(k, 0) <= d_m}
+            if pool:
+                tot = sum(pool.values())
+                r = random.random() * tot
+                kk = list(pool)[-1]
+                for k2, w2 in pool.items():
+                    r -= w2
+                    if r <= 0:
+                        kk = k2
+                        break
+                spec2 = BOOSTS.get(kk) or HAZ.get(kk) or dict(r=90)
+                ents.append([next_high, random.uniform(HIGH_START_H, HIGH_TOP_H),
+                             spec2.get('r', 90) if kk not in ('blimp', 'jet') else (70 if kk == 'blimp' else 170),
+                             kk, kk == 'cloud', False])
+            next_high += random.uniform(*HIGH_SPAWN_INTERVAL_M) * PPM
+
+        # barrier track: one breakable wall at a steady cadence, toughening with distance
+        while next_wall < x + 6000:
+            d_m = next_wall / PPM
+            tough = min(BARRIER_MAX_TOUGH, BARRIER_BASE_TOUGH + d_m * BARRIER_TOUGH_PER_M)
+            tall = random.random() < BARRIER_TALL_CHANCE
+            nblocks = random.randint(*(BARRIER_TALL_BLOCKS if tall else BARRIER_BLOCKS))
+            walls.append([next_wall, BARRIER_BLOCK * nblocks, tough, False])
+            next_wall += random.uniform(*BARRIER_INTERVAL_M) * PPM
 
         stun = max(0.0, stun - DT)
         floating = max(0.0, floating - DT)
@@ -375,7 +440,9 @@ def run(tiers, player_skill=0.6, crew='marlow', gear=(), prestige=0, daily=None,
                 vx += GLIDE_PUSH * DT
             vy += G * gm * DT
             vx += c['sail'] * DT
-            if zone == 'birds':
+            if zone == 'jet':
+                vx += JET_PUSH * DT; vy += JET_LIFT * DT
+            elif zone == 'birds':
                 vy += 380 * DT; vx += 120 * DT
             elif zone == 'cloud':
                 if c['storm_forward']:
@@ -387,8 +454,29 @@ def run(tiers, player_skill=0.6, crew='marlow', gear=(), prestige=0, daily=None,
                 vy -= WHIRL_PULL * DT
                 f *= max(0.0, 1 - WHIRL_DRAG * DT)
             vx *= f; vy *= f
+            prev_x = x
             x += vx * DT; y += vy * DT
             cur_flight += DT
+
+            # walls: crossed one this step, at a height it actually occupies?
+            for wobj in walls:
+                wx, wh, wt, wbroken = wobj
+                if wbroken or not (prev_x < wx <= x) or y > wh or y < 0:
+                    continue
+                spd = math.hypot(vx, vy)
+                if spd >= wt or shields > 0:
+                    if spd < wt:
+                        shields -= 1
+                    wobj[3] = True
+                    vx *= BARRIER_SMASH_KEEP
+                    coins += pay(BARRIER_SMASH_COINS * max(1, int(wh / BARRIER_BLOCK)))
+                    smashed += 1
+                else:
+                    vx *= BARRIER_BOUNCE_MULT
+                    vy = min(vy, 0)
+                    hull -= BARRIER_DAMAGE * c['damage']
+                    x = wx - BARRIER_BOUNCE_BACK
+                break
 
             if y <= WATER_Y:
                 ang_i = math.atan2(-vy, max(vx, 1))
@@ -475,6 +563,18 @@ def run(tiers, player_skill=0.6, crew='marlow', gear=(), prestige=0, daily=None,
                     coins += pay(COIN_VALUE)
                 elif k == 'dolphin':
                     vy = max(vy, 0) * 0.3 + DOLPHIN_UP; vx += DOLPHIN_FWD; state = 'fly'; y = WATER_Y + 1
+                elif k == 'crate':
+                    vx *= CRATE_KEEP; coins += pay(CRATE_COINS)
+                elif k == 'blimp':
+                    vy = abs(vy) * BLIMP_KEEP + BLIMP_UP; vx += BLIMP_FWD; e[5] = False
+                elif k == 'ring':
+                    cur = math.hypot(vx, vy)
+                    if cur > 1:
+                        f2 = (cur + RING_SPEED) / cur
+                        vx *= f2; vy *= f2
+                    else:
+                        vx += RING_SPEED
+                    coins += pay(RING_COINS)
                 elif k == 'balloon':
                     vy += BALLOON_LIFT; floating = BALLOON_SEC
                 elif k == 'mine':
@@ -500,7 +600,8 @@ def run(tiers, player_skill=0.6, crew='marlow', gear=(), prestige=0, daily=None,
     dist_m = x / PPM
     coins += pay(int(dist_m))
     return dict(dist=dist_m, coins=coins, t=t, skips=skips, hull=hull, hits=hazards_hit,
-                maxflight=max_flight, combo=best_combo, perfects=perfects, abilities=ab_uses)
+                maxflight=max_flight, combo=best_combo, perfects=perfects, abilities=ab_uses,
+                smashed=smashed, walls=len([w for w in walls if w[0] <= x]))
 
 
 def batch(tiers, n=300, skill=0.6, label='', **kw):
@@ -513,6 +614,7 @@ def batch(tiers, n=300, skill=0.6, label='', **kw):
           f"combo~{statistics.mean(r['combo'] for r in rs):3.1f}  "
           f"perf~{statistics.mean(r['perfects'] for r in rs):3.1f}  "
           f"ab~{statistics.mean(r['abilities'] for r in rs):4.1f}  "
+          f"smash~{statistics.mean(r['smashed'] for r in rs):4.1f}/{statistics.mean(r['walls'] for r in rs):4.1f}  "
           f"t~{statistics.mean(r['t'] for r in rs):4.1f}s sunk={sum(1 for r in rs if r['hull']<=0)}")
     return statistics.median(d)
 

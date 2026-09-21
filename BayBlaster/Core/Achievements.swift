@@ -20,6 +20,7 @@ enum Achievement: String, Codable, CaseIterable {
     case firstSplash, fly500, fly1000, fly2500, fly5000
     // Skill in a single run
     case skipper, comboKing, perfectionist, bigHaul, unscathed, daredevil, abilityAce
+    case wrecker, demolition, highFlyer, stratosphere
     // Lifetime
     case trekker, voyager, regular, veteran
     // Collection
@@ -40,6 +41,10 @@ enum Achievement: String, Codable, CaseIterable {
         case .bigHaul:       return "Big Haul"
         case .unscathed:     return "Not a Scratch"
         case .daredevil:     return "Daredevil"
+        case .wrecker:       return "Wrecker"
+        case .demolition:    return "Demolition Crew"
+        case .highFlyer:     return "High Flyer"
+        case .stratosphere:  return "Stratospheric"
         case .abilityAce:    return "Show-off"
         case .trekker:       return "Trekker"
         case .voyager:       return "Voyager"
@@ -70,6 +75,10 @@ enum Achievement: String, Codable, CaseIterable {
         case .bigHaul:       return "Earn 1,500 coins in one run."
         case .unscathed:     return "Finish a 500 m run with a full hull."
         case .daredevil:     return "Survive 3 mine blasts in one run."
+        case .wrecker:       return "Smash 5 walls in one run."
+        case .demolition:    return "Smash 12 walls in one run."
+        case .highFlyer:     return "Get 150 m above the water."
+        case .stratosphere:  return "Get 400 m above the water."
         case .abilityAce:    return "Use your ability 8 times in one run."
         case .trekker:       return "Fly 25,000 m in total."
         case .voyager:       return "Fly 100,000 m in total."
@@ -104,6 +113,10 @@ enum Achievement: String, Codable, CaseIterable {
         case .bigHaul:       return run.coins >= 1_500
         case .unscathed:     return run.distance >= 500 && run.endHullFraction >= 1
         case .daredevil:     return (run.hits["mine"] ?? 0) >= 3
+        case .wrecker:       return run.barriersSmashed >= 5
+        case .demolition:    return run.barriersSmashed >= 12
+        case .highFlyer:     return run.peakAltitude >= 150
+        case .stratosphere:  return run.peakAltitude >= 400
         case .abilityAce:    return run.abilitiesUsed >= 8
         case .trekker:       return save.stats.totalDistance >= 25_000
         case .voyager:       return save.stats.totalDistance >= 100_000

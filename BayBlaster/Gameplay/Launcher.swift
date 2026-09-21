@@ -36,6 +36,12 @@ final class Launcher: SKNode {
     private let trajectory = SKNode()
     private var trajectoryDots: [SKShapeNode] = []
     private let muzzleFlash: SKEmitterNode
+    private let muzzleSmoke: SKEmitterNode
+    /// Sits behind the barrel and swells with the power you are winding up, so the aim phase
+    /// has a rising tension instead of a bar that silently slides.
+    private let chargeGlow = SKShapeNode(circleOfRadius: 26)
+    private let shockwave = SKShapeNode(circleOfRadius: 20)
+    private var dotPhase: CGFloat = 0
 
     /// Everything that scales the launch speed on top of the Launcher Power upgrade: the
     /// launcher's own character, plus a clean cast if this one rewards timing.
@@ -66,6 +72,7 @@ final class Launcher: SKNode {
         tower = Art.sprite(spec.towerArtKey)
         barrel = Art.sprite(spec.barrelArtKey)
         muzzleFlash = Launcher.makeMuzzleFlash()
+        muzzleSmoke = Launcher.makeMuzzleSmoke()
         super.init()
 
         tower.position = CGPoint(x: Tuning.launcherPivotX - 40, y: Tuning.waterY)
@@ -76,8 +83,26 @@ final class Launcher: SKNode {
         barrel.zPosition = 60          // in front of the boat so it looks loaded in the muzzle
         addChild(barrel)
 
+        chargeGlow.fillColor = UIColor(red: 1, green: 0.72, blue: 0.25, alpha: 0.5)
+        chargeGlow.strokeColor = UIColor(red: 1, green: 0.9, blue: 0.5, alpha: 0.85)
+        chargeGlow.lineWidth = 3
+        chargeGlow.glowWidth = 8
+        chargeGlow.zPosition = 59
+        chargeGlow.alpha = 0
+        chargeGlow.position = barrel.position
+        addChild(chargeGlow)
+
         muzzleFlash.zPosition = 61
         addChild(muzzleFlash)
+        muzzleSmoke.zPosition = 59
+        addChild(muzzleSmoke)
+
+        shockwave.fillColor = .clear
+        shockwave.strokeColor = UIColor.white.withAlphaComponent(0.85)
+        shockwave.lineWidth = 5
+        shockwave.zPosition = 62
+        shockwave.alpha = 0
+        addChild(shockwave)
 
         trajectory.zPosition = 4
         trajectory.isHidden = true          // shown once the aim sweep starts
@@ -98,7 +123,9 @@ final class Launcher: SKNode {
 
     func update(dt: CGFloat, launchSpeed: CGFloat) {
         clock += dt
+        dotPhase += dt
         trajectory.isHidden = aimState == .fired
+        updateChargeGlow()
         switch aimState {
         case .sweepingAngle:
             // Triangle wave between this launcher's min and max angle.
@@ -189,24 +216,71 @@ final class Launcher: SKNode {
     private static let debugForcedPower: CGFloat? = ProcessInfo.processInfo.environment["BB_POWER"].flatMap { Double($0) }.map { CGFloat($0) }
     #endif
 
-    /// Recoil + flash. Call right after the boat leaves.
+    /// Recoil, flash, smoke and shockwave. Call right after the boat leaves.
     func fire() {
         trajectory.run(.fadeOut(withDuration: 0.3))
+        chargeGlow.removeAllActions()
+        chargeGlow.run(.group([.scale(to: 2.6, duration: 0.18), .fadeOut(withDuration: 0.18)]))
+
         let a = barrelAngle
-        let kick = CGVector(dx: -cos(a) * 14, dy: -sin(a) * 14)
-        barrel.run(.sequence([
+        let muzzle = muzzlePoint
+        // Anticipation then recoil: a hard snap back along the barrel, a slower settle forward.
+        let kick = CGVector(dx: -cos(a) * 22, dy: -sin(a) * 22)
+        barrel.removeAllActions()
+        let recoil = SKAction.sequence([
             .move(by: kick, duration: 0.05),
-            .move(by: CGVector(dx: -kick.dx, dy: -kick.dy), duration: 0.35)
-        ]))
-        muzzleFlash.position = muzzlePoint
+            .move(by: CGVector(dx: -kick.dx * 0.75, dy: -kick.dy * 0.75), duration: 0.18),
+            .move(by: CGVector(dx: -kick.dx * 0.25, dy: -kick.dy * 0.25), duration: 0.22)
+        ])
+        recoil.timingMode = .easeOut
+        barrel.run(recoil)
+        barrel.run(.sequence([.scaleX(to: 1.12, duration: 0.05), .scaleX(to: 1, duration: 0.25)]))
+
+        muzzleFlash.position = muzzle
         muzzleFlash.emissionAngle = a
         muzzleFlash.resetSimulation()
-        muzzleFlash.particleBirthRate = 600
+        muzzleFlash.particleBirthRate = 900
         muzzleFlash.run(.sequence([.wait(forDuration: 0.12), .run { [weak self] in self?.muzzleFlash.particleBirthRate = 0 }]))
+
+        muzzleSmoke.position = muzzle
+        muzzleSmoke.emissionAngle = a
+        muzzleSmoke.resetSimulation()
+        muzzleSmoke.particleBirthRate = 260
+        muzzleSmoke.run(.sequence([.wait(forDuration: 0.28), .run { [weak self] in self?.muzzleSmoke.particleBirthRate = 0 }]))
+
+        // A ring of compressed air racing away from the muzzle.
+        shockwave.removeAllActions()
+        shockwave.position = muzzle
+        shockwave.setScale(0.2)
+        shockwave.alpha = 0.9
+        shockwave.lineWidth = 6
+        shockwave.run(.group([
+            .scale(to: Tuning.launchShockwaveRadius / 20, duration: 0.42),
+            .sequence([.wait(forDuration: 0.08), .fadeOut(withDuration: 0.34)]),
+            .customAction(withDuration: 0.42) { node, elapsed in
+                (node as? SKShapeNode)?.lineWidth = 6 * (1 - CGFloat(elapsed) / 0.42) + 0.5
+            }
+        ]))
     }
 
     private func updateBarrel() {
         barrel.zRotation = barrelAngle
+    }
+
+    /// The barrel's wind-up: invisible while the angle sweeps, then swelling and brightening
+    /// with the power you are committing to.
+    private func updateChargeGlow() {
+        guard aimState == .sweepingPower else {
+            if chargeGlow.alpha > 0 { chargeGlow.alpha = max(0, chargeGlow.alpha - 0.08) }
+            return
+        }
+        let t = clamp(power, 0, 1)
+        chargeGlow.alpha = 0.25 + t * 0.6
+        chargeGlow.setScale(1 + t * (Tuning.aimChargeGlowScale - 1) + sin(dotPhase * 14) * 0.04 * t)
+        // Green at the top of the sweep so "now" is unmistakable, matching the power bar.
+        chargeGlow.fillColor = t > 0.85
+            ? UIColor(red: 0.4, green: 1, blue: 0.55, alpha: 0.55)
+            : UIColor(red: 1, green: 0.72, blue: 0.25, alpha: 0.5)
     }
 
     /// Preview arc for the current angle/speed (ignores drag; it's a hint, not a promise).
@@ -221,7 +295,35 @@ final class Launcher: SKNode {
             let y = start.y + vy * t + 0.5 * Tuning.gravity * t * t
             dot.position = CGPoint(x: x, y: y)
             dot.isHidden = y < Tuning.waterY
+            // A bright pulse travels out along the arc, so the preview reads as a direction of
+            // travel rather than a static dotted line.
+            let wave = sin(dotPhase * 6 - CGFloat(i) * 0.7) * 0.5 + 0.5
+            dot.setScale(0.75 + wave * 0.6)
+            dot.alpha = 0.35 + wave * 0.5
         }
+    }
+
+    /// Grey-brown powder smoke that lingers after the flash has gone.
+    private static func makeMuzzleSmoke() -> SKEmitterNode {
+        let e = SKEmitterNode()
+        e.particleTexture = Art.particleTexture
+        e.particleBirthRate = 0
+        e.particleLifetime = 1.1
+        e.particleLifetimeRange = 0.5
+        e.particleSpeed = 110
+        e.particleSpeedRange = 80
+        e.emissionAngleRange = 1.1
+        e.particleAlpha = 0.55
+        e.particleAlphaSpeed = -0.5
+        e.particleScale = 1.1
+        e.particleScaleRange = 0.6
+        e.particleScaleSpeed = 1.4
+        e.yAcceleration = 30
+        e.particleColor = UIColor(red: 0.72, green: 0.70, blue: 0.66, alpha: 1)
+        e.particleColorBlendFactor = 1
+        e.particleRotationRange = .pi
+        e.particleRotationSpeed = 0.6
+        return e
     }
 
     private static func makeMuzzleFlash() -> SKEmitterNode {

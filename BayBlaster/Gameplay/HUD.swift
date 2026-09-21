@@ -5,6 +5,8 @@ import SpriteKit
 final class HUD: SKNode {
 
     private let distanceLabel = SKLabelNode(fontNamed: Tuning.fontHeavy)
+    /// Height above the water. Hidden near the deck, so it only appears when it is interesting.
+    private let altitudeLabel = SKLabelNode(fontNamed: Tuning.fontBold)
     private let coinsLabel = SKLabelNode(fontNamed: Tuning.fontBold)
     private let coinIcon: SKNode
     private let rocketsLabel = SKLabelNode(fontNamed: Tuning.fontBold)
@@ -49,6 +51,13 @@ final class HUD: SKNode {
         distanceLabel.verticalAlignmentMode = .top
         distanceLabel.fontColor = .white
         addChild(distanceLabel)
+
+        altitudeLabel.fontSize = 17
+        altitudeLabel.horizontalAlignmentMode = .left
+        altitudeLabel.verticalAlignmentMode = .top
+        altitudeLabel.fontColor = UIColor(red: 0.72, green: 0.92, blue: 1, alpha: 1)
+        altitudeLabel.alpha = 0
+        addChild(altitudeLabel)
 
         coinsLabel.fontSize = 22
         coinsLabel.horizontalAlignmentMode = .left
@@ -148,8 +157,9 @@ final class HUD: SKNode {
         let bottom = -h / 2 + insets.bottom + 14
 
         distanceLabel.position = CGPoint(x: left, y: top)
-        coinIcon.position = CGPoint(x: left + 10, y: top - 52)
-        coinsLabel.position = CGPoint(x: left + 26, y: top - 52)
+        altitudeLabel.position = CGPoint(x: left, y: top - 34)
+        coinIcon.position = CGPoint(x: left + 10, y: top - 62)
+        coinsLabel.position = CGPoint(x: left + 26, y: top - 62)
 
         rocketIcon.position = CGPoint(x: right - 10, y: top - 18)
         rocketsLabel.position = CGPoint(x: right - 30, y: top - 18)
@@ -188,6 +198,18 @@ final class HUD: SKNode {
         coinsLabel.removeAllActions()
         coinsLabel.setScale(1.25)
         coinsLabel.run(.scale(to: 1, duration: 0.15))
+    }
+
+    /// `points` is height above the water line. Fades in past `Tuning.altitudeHudHeight` so the
+    /// readout is only on screen when there is a climb worth watching.
+    func setAltitude(_ points: CGFloat) {
+        let visible = points > Tuning.altitudeHudHeight
+        altitudeLabel.text = "▲ \(Int(points / Tuning.pointsPerMeter)) m up"
+        let target: CGFloat = visible ? 1 : 0
+        if abs(altitudeLabel.alpha - target) > 0.01 {
+            altitudeLabel.removeAllActions()
+            altitudeLabel.run(.fadeAlpha(to: target, duration: 0.25))
+        }
     }
 
     func setRockets(_ n: Int) {

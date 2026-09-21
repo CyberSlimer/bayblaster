@@ -81,6 +81,7 @@ enum Tuning {
     static let cameraSpeedZoomMax: CGFloat = 0.6      // extra zoom-out at very high speed
     static let cameraSpeedZoomRef: CGFloat = 2600     // speed that gives the max extra zoom
     static let cameraShakeDecay: CGFloat = 9.0
+    static let cameraPunchEase: CGFloat = 2.6        // how fast a launch punch-zoom eases back to normal
 
     // MARK: - World spawning (WorldSpawner)
     static let spawnStartX: CGFloat = 450             // no objects before this (clear launch zone)
@@ -97,6 +98,46 @@ enum Tuning {
     static let coinArcSpacing: CGFloat = 46           // horizontal gap between coins in an arc (points)
     static let coinArcHeightRange: ClosedRange<CGFloat> = 80...420 // arc peak height above the water
     static let coinArcRise: CGFloat = 90              // how much the arc curves (0 = flat line)
+
+    // MARK: - The high air
+    // Everything above `highAirStartHeight` used to be empty: the low spawn bands stop at 900
+    // points, so a big launch flew through nothing at all. The spawner now runs a second,
+    // independent track up here (see WorldSpawner), and the sky itself reacts to altitude.
+    static let highAirStartHeight: CGFloat = 900      // points above the water where the high air begins
+    static let highAirTopHeight: CGFloat = 3000       // …and where it thins out again
+    static let highSpawnStartMeters: CGFloat = 60     // no high-air objects before this
+    static let highSpawnIntervalMeters: ClosedRange<CGFloat> = 90...170
+    static let altitudeHudHeight: CGFloat = 300       // the altitude readout appears above this
+    static let skySpaceStartHeight: CGFloat = 1000    // sky starts darkening toward space here…
+    static let skySpaceFullHeight: CGFloat = 3200     // …and is fully "up there" here
+    static let highCloudAltitude: CGFloat = 1900      // the cirrus deck you climb through
+    static let highCloudParallax: CGFloat = 0.12
+
+    // MARK: - Barriers (breakable walls)
+    // The Burrito Bison beat: a wall you either smash through because you are fast enough, or
+    // bounce off because you are not. They get their own spawn track so the cadence is
+    // predictable, and their toughness ramps with distance so the question stays live.
+    static let barrierStartMeters: CGFloat = 120
+    static let barrierIntervalMeters: ClosedRange<CGFloat> = 240...420
+    static let barrierBlockSize: CGFloat = 64         // one brick; a wall is a stack of these
+    static let barrierBlocks: ClosedRange<Int> = 4...12
+    // One wall in four is a towering sky gate. Without these, a late-game launch simply flies
+    // over every wall in the run and the whole mechanic stops existing at the top end.
+    static let barrierTallGateChance: CGFloat = 0.25
+    static let barrierTallBlocks: ClosedRange<Int> = 14...26
+    // Toughness is deliberately a GENTLE ramp with a low cap. Speed in this game tracks your
+    // upgrade tier, not how far you have flown, and it decays across a run — a steep ramp just
+    // put a wall you cannot break at the end of every run, whatever your build.
+    static let barrierBaseToughness: CGFloat = 380    // speed needed to smash the earliest walls
+    static let barrierToughnessPerMetre: CGFloat = 0.18
+    static let barrierMaxToughness: CGFloat = 1400
+    static let barrierStoneToughness: CGFloat = 700   // visual tier thresholds (plank → stone → iron)
+    static let barrierIronToughness: CGFloat = 1050
+    static let barrierSmashSpeedKeep: CGFloat = 0.94  // smashing through costs a little speed…
+    static let barrierSmashCoinsPerBlock = 9          // …and pays per brick, so a tall gate is a real payday
+    static let barrierBounceSpeedMultiplier: CGFloat = 0.18  // failing to smash nearly stops you
+    static let barrierBounceBack: CGFloat = 46        // …and shoves you clear so you don't re-hit it
+    static let barrierDamage: CGFloat = 12
 
     // MARK: - Entity effects
     static let buoyBounceSpeed: CGFloat = 520         // upward speed added by a buoy
@@ -130,6 +171,15 @@ enum Tuning {
     static let balloonFloatSeconds: CGFloat = 2.2     // popping balloons cuts gravity for this long
     static let balloonGravityMultiplier: CGFloat = 0.3
     static let balloonLift: CGFloat = 220             // instant upward kick when the balloons pop
+    static let crateCoins = 30                        // floating supply crate: always breakable, teaches the smash
+    static let crateSpeedKeep: CGFloat = 0.97
+    static let blimpBounceSpeed: CGFloat = 760        // high-air trampoline
+    static let blimpKeepFraction: CGFloat = 0.35
+    static let blimpForward: CGFloat = 120
+    static let boostRingSpeed: CGFloat = 420          // fly through the hoop for a shove…
+    static let boostRingCoins = 20                    // …and a payout, for flying precisely
+    static let jetStreamPush: CGFloat = 900           // pt/s² forward inside the jet stream
+    static let jetStreamLift: CGFloat = 90            // …and a gentle updraft that keeps you in it
 
     // MARK: - Economy
     static let coinsPerMeter = 1
@@ -300,6 +350,7 @@ enum Tuning {
         .firstSplash: 150, .fly500: 200, .fly1000: 400, .fly2500: 800, .fly5000: 1600,
         .skipper: 400, .comboKing: 600, .perfectionist: 600, .bigHaul: 500,
         .unscathed: 500, .daredevil: 700, .abilityAce: 500,
+        .wrecker: 500, .demolition: 1200, .highFlyer: 400, .stratosphere: 1200,
         .trekker: 700, .voyager: 2000, .regular: 400, .veteran: 1800,
         .crewOfThree: 500, .fullCrew: 2500, .firstPart: 250, .fullGarage: 2500,
         .fullArsenal: 2500, .maxedOut: 2000, .castOff: 1500, .dailyDoer: 300, .weekStreak: 1500
@@ -316,6 +367,13 @@ enum Tuning {
 
     // MARK: - Presentation
     static let dayNightMeters: CGFloat = 3000         // sky is fully night after this distance
+    static let launchFlashDuration: TimeInterval = 0.22   // white screen flash on firing
+    static let launchShockwaveRadius: CGFloat = 300        // expanding ring at the muzzle
+    static let launchCameraPunch: CGFloat = 0.84           // camera snaps to this zoom, then eases back out
+    static let launchTumbleTurns: CGFloat = 1.5            // how many times the boat spins out of the barrel
+    static let launchTumbleDuration: TimeInterval = 0.5
+    static let launchShake: CGFloat = 16
+    static let aimChargeGlowScale: CGFloat = 1.9           // barrel glow at full power during the aim sweep
     static let resultsCountUpDuration: TimeInterval = 1.4
     static let nearBestFraction: CGFloat = 0.2        // "only N m short of your best" shows within this fraction of best
     static let fontHeavy = "AvenirNext-Heavy"

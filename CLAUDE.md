@@ -20,6 +20,25 @@ fired out over the bay. See README.md for the file map and HANDOFF.md for curren
   in 3 slots, 4 launchers with 3 different aim rituals, 25 achievements, a seeded daily
   challenge, and prestige. New `LockerScene`. `save.version` is now 2; v1 saves load fine.
 
+- 2026-09-21 "smash" update (also NOT YET COMPILED): breakable walls on their own spawn track,
+  a high-air spawn track and an altitude-driven sky so a big launch is not flying through
+  nothing, plus a proper launch sequence (punch-zoom, shockwave, smoke, whiteout, tumble).
+  21 entity kinds, 16 mission kinds, 29 trophies.
+
+## Three spawn tracks
+
+`WorldSpawner` runs three independent passes, each with its own cadence:
+
+- **low** — the original one, water level to ~900 points, weighted by `Spec.weight`
+- **high air** — above `Tuning.highAirStartHeight`, weighted by `Spec.highAirWeight`, so a kind
+  can appear in both pools at different rates
+- **barrier** — breakable walls, `Tuning.barrierIntervalMeters` apart
+
+A wall is the one kind that is neither boost nor hazard: `WorldEntity` builds it as a stack of
+bricks with a *rectangular* body and a `toughness`. Keep barrier toughness a gentle ramp with a
+low cap — speed in this game tracks the player's upgrade tier, not distance, and it decays
+across a run, so a steep ramp just parks an unbreakable wall at the end of every run.
+
 ## The loadout pipeline
 
 Anything that changes how a run plays must end up in `UpgradeConfig` (`Core/Loadout.swift`),
@@ -38,6 +57,9 @@ the *base* values those layers multiply.
 - New launcher → `Core/Launchers.swift`; a brand-new ritual needs an `AimMode` case handled
   in `Launcher.update` and in `HUD.setLauncherStyle`.
 - New trophy → `Core/Achievements.swift`; new data for it goes in `RunStats`.
+- Anything that owns `player.visual.zRotation` must say so: `Player.update` eases it toward the
+  direction of travel every frame, so the launch tumble suppresses that with `tumbleRemaining`
+  rather than running an action alongside it.
 - Pacing constants were tuned with `Tools/sim.py` (a Python mirror of the physics). If you change
   anything in `Tuning` that affects distance, mirror it in `sim.py` and re-run
   `python3 Tools/sim.py` so the pacing table stays honest.

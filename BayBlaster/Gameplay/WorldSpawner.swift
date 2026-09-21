@@ -5,6 +5,12 @@ import SpriteKit
 /// Lucky Horseshoe trinket scale the boost share, and a daily modifier can push the hazard share
 /// up for the day.
 ///
+/// Three independent tracks run at once:
+///   · the LOW track — the original one, water level up to ~900 points
+///   · the HIGH-AIR track — fills the sky above `Tuning.highAirStartHeight`, which used to be
+///     completely empty, so a big launch now flies through something
+///   · the BARRIER track — breakable walls at a steady cadence, toughness ramping with distance
+///
 /// Every random draw goes through `RandomSource`. On a normal run that is the system generator;
 /// on a daily challenge it is seeded from the date, so the whole bay is laid out identically for
 /// every attempt that day.
@@ -12,6 +18,8 @@ final class WorldSpawner {
     private weak var world: SKNode?
     private var entities: [WorldEntity] = []
     private var nextSpawnX: CGFloat = Tuning.spawnStartX
+    private var nextHighSpawnX: CGFloat = Tuning.highSpawnStartMeters * Tuning.pointsPerMeter
+    private var nextBarrierX: CGFloat = Tuning.barrierStartMeters * Tuning.pointsPerMeter
     private let boostWeightMultiplier: CGFloat
     private let coinArcChance: CGFloat
     private let hazardFractionBonus: CGFloat
@@ -27,13 +35,24 @@ final class WorldSpawner {
     }
 
     func update(playerX: CGFloat) {
-        // Spawn ahead
-        while nextSpawnX < playerX + Tuning.spawnAheadDistance {
+        let horizon = playerX + Tuning.spawnAheadDistance
+        // Low track
+        while nextSpawnX < horizon {
             spawn(at: nextSpawnX)
             let metres = nextSpawnX / Tuning.pointsPerMeter
             let density = 1 + clamp(metres / Tuning.densityRampMeters, 0, 1) * Tuning.densityRampMax
             let gap = rng.cgFloat(in: Tuning.spawnIntervalMeters) * Tuning.pointsPerMeter / density
             nextSpawnX += gap
+        }
+        // High-air track
+        while nextHighSpawnX < horizon {
+            spawnHighAir(at: nextHighSpawnX)
+            nextHighSpawnX += rng.cgFloat(in: Tuning.highSpawnIntervalMeters) * Tuning.pointsPerMeter
+        }
+        // Barrier track
+        while nextBarrierX < horizon {
+            spawnBarrier(at: nextBarrierX)
+            nextBarrierX += rng.cgFloat(in: Tuning.barrierIntervalMeters) * Tuning.pointsPerMeter
         }
         // Recycle behind (and drop anything that already removed itself)
         entities.removeAll { e in
@@ -69,6 +88,35 @@ final class WorldSpawner {
         place(kind, at: CGPoint(x: x, y: Tuning.waterY + rng.cgFloat(in: height)), in: world)
     }
 
+    /// Fill the sky. The low track's height bands stop at 900 points, so without this every
+    /// launch that cleared them flew through nothing at all.
+    private func spawnHighAir(at x: CGFloat) {
+        guard let world = world else { return }
+        let metres = x / Tuning.pointsPerMeter
+        let pool = EntityKind.highAir.filter { $0.unlockMetres <= metres }
+        guard !pool.isEmpty else { return }
+        let kind = pick(from: pool, weight: { $0.spec.highAirWeight })
+        let y = Tuning.waterY + rng.cgFloat(in: Tuning.highAirStartHeight...Tuning.highAirTopHeight)
+        place(kind, at: CGPoint(x: x, y: y), in: world)
+    }
+
+    /// One breakable wall, standing on the water. Toughness ramps with distance so "am I fast
+    /// enough?" stays a live question instead of being settled once.
+    private func spawnBarrier(at x: CGFloat) {
+        guard let world = world else { return }
+        let metres = x / Tuning.pointsPerMeter
+        let toughness = min(Tuning.barrierMaxToughness,
+                            Tuning.barrierBaseToughness + metres * Tuning.barrierToughnessPerMetre)
+        // Most walls stand at skipping height; a quarter are sky gates tall enough to catch a
+        // launch that would otherwise sail clean over everything.
+        let tall = rng.unit() < Tuning.barrierTallGateChance
+        let blocks = rng.int(in: tall ? Tuning.barrierTallBlocks : Tuning.barrierBlocks)
+        let wall = WorldEntity(kind: .barrier, toughness: toughness, blocks: blocks)
+        wall.position = CGPoint(x: x, y: Tuning.waterY)
+        world.addChild(wall)
+        entities.append(wall)
+    }
+
     /// A gentle parabola of small coins — a line the player can *aim* for. The arc peaks in the
     /// middle so following it through rewards a well-timed rocket or dive.
     private func spawnCoinArc(at x: CGFloat, in world: SKNode) {
@@ -92,11 +140,15 @@ final class WorldSpawner {
         entities.append(entity)
     }
 
-    private func pick(from kinds: [EntityKind]) -> EntityKind {
-        let total = kinds.reduce(CGFloat(0)) { $0 + $1.spec.weight }
+    /// Weighted pick. `weight` selects which of the two weight columns to read, so the low
+    /// track and the high-air track can share kinds at different frequencies.
+    private func pick(from kinds: [EntityKind],
+                      weight: (EntityKind) -> CGFloat = { $0.spec.weight }) -> EntityKind {
+        let total = kinds.reduce(CGFloat(0)) { $0 + weight($1) }
+        guard total > 0 else { return kinds[kinds.count - 1] }
         var r = rng.cgFloat(in: 0...total)
         for k in kinds {
-            r -= k.spec.weight
+            r -= weight(k)
             if r <= 0 { return k }
         }
         return kinds[kinds.count - 1]
@@ -117,6 +169,8 @@ final class WorldSpawner {
         for e in entities { e.removeFromParent() }
         entities.removeAll()
         nextSpawnX = Tuning.spawnStartX
+        nextHighSpawnX = Tuning.highSpawnStartMeters * Tuning.pointsPerMeter
+        nextBarrierX = Tuning.barrierStartMeters * Tuning.pointsPerMeter
         lastWasWaterHazard = false
     }
 }

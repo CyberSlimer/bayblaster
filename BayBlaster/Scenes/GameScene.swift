@@ -10,7 +10,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     enum Phase { case aiming, flying, ended }
 
     /// Feedback requests from entities (see WorldEntity.apply).
-    enum JuiceKind { case bump, whale, motor, hurt, net, dolphin, balloon, explosion, sting, blocked }
+    enum JuiceKind { case bump, whale, motor, hurt, net, dolphin, balloon, explosion, sting, blocked, smash, shieldSmash, clang, ring }
 
     private var phase: Phase = .aiming
     private let cam = GameCamera()
@@ -26,6 +26,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var milestones: Milestones!
     private var splashTemplate: SKEmitterNode!
     private var resultsOverlay: SKNode?
+    /// Full-screen white sprite on the camera, flashed on launch and on a big smash.
+    private var flashOverlay: SKSpriteNode!
 
     private var didBuild = false
     private var lastUpdateTime: TimeInterval = 0
@@ -43,6 +45,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var missionCheckTimer: CGFloat = 0
     private var announcedMissionIds: Set<Int> = []
     private var abilitiesUsed = 0
+    private var barriersSmashed = 0
+    private var peakAltitude: CGFloat = 0
 
     /// Non-nil on a daily-challenge run.
     private let daily: DailyChallenge?
@@ -122,6 +126,12 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         hud.setControlHint(ability: config.ability)
 
         splashTemplate = GameScene.makeSplashTemplate()
+
+        flashOverlay = SKSpriteNode(color: .white, size: CGSize(width: size.width * 3, height: size.height * 3))
+        flashOverlay.zPosition = 1500
+        flashOverlay.alpha = 0
+        cam.addChild(flashOverlay)
+
         cam.snap(to: player.position)
 
         if let daily = daily {
@@ -140,6 +150,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func layoutHUD() {
         hud?.layout(sceneSize: size, insets: view?.safeAreaInsets ?? .zero)
+        flashOverlay?.size = CGSize(width: size.width * 3, height: size.height * 3)
         // The cast band / draw-danger zone is positioned relative to the power bar, so it has
         // to be re-styled after every layout pass.
         if let hud = hud, let launcher = launcher { hud.setLauncherStyle(launcher) }
@@ -180,9 +191,11 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             spawner.update(playerX: player.position.x)
             milestones.update(playerX: player.position.x)
             updateDistance()
+            peakAltitude = max(peakAltitude, player.altitude)
             cam.follow(target: player.position, velocity: player.velocity, dt: dt)
-            background.update(camera: cam, distanceMetres: distanceMetres, dt: dt)
+            background.update(camera: cam, distanceMetres: distanceMetres, altitude: player.altitude, dt: dt)
             hud.setDistance(distanceMetres)
+            hud.setAltitude(player.altitude)
             hud.setCoins(runCoins)
             hud.setRockets(player.rockets)
             hud.setHull(fraction: player.hullFraction)
@@ -199,7 +212,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         case .ended:
             player.update(dt: dt)
             cam.follow(target: player.position, velocity: player.velocity, dt: dt)
-            background.update(camera: cam, distanceMetres: distanceMetres, dt: dt)
+            background.update(camera: cam, distanceMetres: distanceMetres, altitude: player.altitude, dt: dt)
         }
     }
 
@@ -390,6 +403,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         stats.hazardsHit = hazardsHit
         stats.hits = entityHits
         stats.abilitiesUsed = abilitiesUsed
+        stats.barriersSmashed = barriersSmashed
+        stats.peakAltitude = Double(peakAltitude / Tuning.pointsPerMeter)
         stats.endHullFraction = Double(player.hullFraction)
         stats.isDaily = isDaily
         return stats
@@ -429,6 +444,19 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             AudioManager.shared.play(.coin)
             Haptics.medium(0.6)
         }
+    }
+
+    /// Called by a wall the moment it breaks, so missions and trophies can count it.
+    func noteBarrierSmashed() {
+        barriersSmashed += 1
+    }
+
+    /// A brief full-screen whiteout. `strength` is the peak alpha.
+    func flash(_ strength: CGFloat, duration: TimeInterval) {
+        guard let flashOverlay = flashOverlay else { return }
+        flashOverlay.removeAllActions()
+        flashOverlay.alpha = clamp(strength, 0, 1)
+        flashOverlay.run(.fadeAlpha(to: 0, duration: duration))
     }
 
     func damagePlayer(_ amount: CGFloat, shake: CGFloat) {
@@ -494,6 +522,33 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             Haptics.medium(0.9)
             FloatingLabel.show("BLOCKED!", at: position + CGPoint(x: 0, y: 50), in: world,
                                color: UIColor(red: 1, green: 0.8, blue: 0.4, alpha: 1), fontSize: 24)
+        case .smash:
+            AudioManager.shared.play(.explosion, volume: 0.9)
+            Haptics.heavy()
+            cam.shake(13)
+            flash(0.28, duration: 0.16)
+            debris(at: position, tint: UIColor(red: 0.75, green: 0.6, blue: 0.4, alpha: 1))
+            FloatingLabel.show("SMASH!", at: position + CGPoint(x: 0, y: 70), in: world,
+                               color: UIColor(red: 1, green: 0.85, blue: 0.4, alpha: 1), fontSize: 32)
+        case .shieldSmash:
+            AudioManager.shared.play(.explosion, volume: 1)
+            Haptics.heavy()
+            cam.shake(16)
+            flash(0.35, duration: 0.18)
+            debris(at: position, tint: UIColor(red: 1, green: 0.8, blue: 0.35, alpha: 1))
+            FloatingLabel.show("SHELL SMASH!", at: position + CGPoint(x: 0, y: 70), in: world,
+                               color: UIColor(red: 1, green: 0.8, blue: 0.35, alpha: 1), fontSize: 30)
+        case .clang:
+            AudioManager.shared.play(.hurt, volume: 1)
+            Haptics.failure()
+            cam.shake(16)
+            FloatingLabel.show("TOO SLOW!", at: position + CGPoint(x: 0, y: 60), in: world,
+                               color: UIColor(red: 1, green: 0.45, blue: 0.4, alpha: 1), fontSize: 28)
+        case .ring:
+            AudioManager.shared.play(.perfect, volume: 0.7)
+            Haptics.medium(0.7)
+            FloatingLabel.show("CLEAN!", at: position + CGPoint(x: 0, y: 56), in: world,
+                               color: UIColor(red: 0.4, green: 1, blue: 0.8, alpha: 1), fontSize: 24)
         }
     }
 
@@ -657,9 +712,17 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         hud.showHint(nil)
         hud.setAbilityVisible(true)
         hud.setAbility(charge: 1, ready: true, shields: 0)
-        cam.shake(7)
+
+        // The launch beat: a whiteout, a punch-in on the muzzle that eases back out as the boat
+        // climbs away, a hard shake, and a tumble out of the barrel that settles into flight.
+        flash(0.55, duration: Tuning.launchFlashDuration)
+        cam.punchZoom(Tuning.launchCameraPunch)
+        cam.shake(Tuning.launchShake)
         Haptics.heavy()
         AudioManager.shared.play(.launch)
+        AudioManager.shared.play(.explosion, volume: 0.45)
+
+        player.tumble(turns: Tuning.launchTumbleTurns, seconds: Tuning.launchTumbleDuration)
 
         // Tell the player how their launch went, when the launcher has something to say.
         if launcher.didHitSweetSpot {
@@ -899,6 +962,34 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         e.particleColorBlendFactor = 1
         e.zPosition = 45
         return e
+    }
+
+    /// Chunky burst for a smashed wall or crate — heavier and slower than a splash, and
+    /// tinted to whatever just broke.
+    private func debris(at position: CGPoint, tint: UIColor) {
+        let e = SKEmitterNode()
+        e.particleTexture = Art.particleTexture
+        e.particleBirthRate = 1400
+        e.numParticlesToEmit = 42
+        e.particleLifetime = 0.9
+        e.particleLifetimeRange = 0.5
+        e.particleSpeed = 420
+        e.particleSpeedRange = 240
+        e.emissionAngleRange = .pi * 2
+        e.yAcceleration = -1100
+        e.particleAlpha = 1
+        e.particleAlphaSpeed = -1.1
+        e.particleScale = 0.8
+        e.particleScaleRange = 0.5
+        e.particleScaleSpeed = -0.4
+        e.particleColor = tint
+        e.particleColorBlendFactor = 1
+        e.particleRotationRange = .pi
+        e.particleRotationSpeed = 5
+        e.position = position
+        e.zPosition = 60
+        world.addChild(e)
+        e.run(.sequence([.wait(forDuration: 1.8), .removeFromParent()]))
     }
 
     private func splash(at position: CGPoint, intensity: CGFloat) {

@@ -146,6 +146,15 @@ enum Placeholders {
         case "torpedoRig":  return torpedoRig()
         case "torpedoTube": return torpedoTube()
         case "trophyIcon":  return trophyIcon()
+        // Smashables and the high air
+        case "barrierWood":  return barrierWood()
+        case "barrierStone": return barrierStone()
+        case "barrierIron":  return barrierIron()
+        case "crate":        return crate()
+        case "blimp":        return blimp()
+        case "boostRing":    return boostRing()
+        case "jetStream":    return jetStream()
+        case "cirrus":       return cirrus()
         default:            return missing()
         }
     }
@@ -1007,6 +1016,161 @@ enum Placeholders {
         rect(CGSize(width: 4, height: 4), at: CGPoint(x: 0, y: -3), corner: 1, fill: gold.darker(0.1), stroke: .clear, in: n)
         for dx in [-9, 9] {
             circle(3.5, at: CGPoint(x: CGFloat(dx), y: 6), fill: .clear, stroke: gold, lineWidth: 2, in: n)
+        }
+        return n
+    }
+
+
+    // MARK: - Smashables and the high air
+
+    /// One brick of a breakable wall. Three tiers, chosen by toughness in `WorldEntity`, so a
+    /// wall's difficulty reads at a glance from across the bay. All drawn 64x64, origin centred.
+    private static func brick(face: UIColor, mortar: UIColor, studs: Bool) -> SKNode {
+        let n = SKNode()
+        let s = Tuning.barrierBlockSize
+        rect(CGSize(width: s, height: s), corner: 4, fill: face, stroke: mortar, lineWidth: 3, in: n)
+        // two courses of masonry, offset
+        rect(CGSize(width: s - 10, height: 2.5), at: CGPoint(x: 0, y: 0), corner: 1,
+             fill: mortar.withAlphaComponent(0.8), stroke: .clear, in: n)
+        rect(CGSize(width: 2.5, height: s / 2 - 6), at: CGPoint(x: 0, y: s / 4 + 1), corner: 1,
+             fill: mortar.withAlphaComponent(0.8), stroke: .clear, in: n)
+        rect(CGSize(width: 2.5, height: s / 2 - 6), at: CGPoint(x: -s / 4, y: -s / 4 - 1), corner: 1,
+             fill: mortar.withAlphaComponent(0.8), stroke: .clear, in: n)
+        rect(CGSize(width: 2.5, height: s / 2 - 6), at: CGPoint(x: s / 4, y: -s / 4 - 1), corner: 1,
+             fill: mortar.withAlphaComponent(0.8), stroke: .clear, in: n)
+        if studs {
+            for p in [CGPoint(x: -s / 2 + 8, y: s / 2 - 8), CGPoint(x: s / 2 - 8, y: s / 2 - 8),
+                      CGPoint(x: -s / 2 + 8, y: -s / 2 + 8), CGPoint(x: s / 2 - 8, y: -s / 2 + 8)] {
+                circle(3.2, at: p, fill: face.lighter(0.18), stroke: mortar, lineWidth: 1, in: n)
+            }
+        }
+        return n
+    }
+
+    static func barrierWood() -> SKNode {
+        brick(face: UIColor(red: 0.62, green: 0.44, blue: 0.27, alpha: 1),
+              mortar: UIColor(red: 0.38, green: 0.26, blue: 0.15, alpha: 1), studs: false)
+    }
+
+    static func barrierStone() -> SKNode {
+        brick(face: UIColor(red: 0.62, green: 0.63, blue: 0.66, alpha: 1),
+              mortar: UIColor(red: 0.38, green: 0.39, blue: 0.43, alpha: 1), studs: false)
+    }
+
+    static func barrierIron() -> SKNode {
+        brick(face: UIColor(red: 0.40, green: 0.44, blue: 0.52, alpha: 1),
+              mortar: UIColor(red: 0.20, green: 0.23, blue: 0.29, alpha: 1), studs: true)
+    }
+
+    /// Floating supply crate, ~44 square. Always breakable — it teaches the smash before the
+    /// first real wall shows up.
+    static func crate() -> SKNode {
+        let n = SKNode()
+        let wood = UIColor(red: 0.78, green: 0.58, blue: 0.33, alpha: 1)
+        rect(CGSize(width: 44, height: 40), corner: 3, fill: wood, in: n)
+        for pts in [[CGPoint(x: -20, y: -17), CGPoint(x: 20, y: 17)],
+                    [CGPoint(x: -20, y: 17), CGPoint(x: 20, y: -17)]] {
+            let p = CGMutablePath()
+            p.move(to: pts[0]); p.addLine(to: pts[1])
+            let brace = SKShapeNode(path: p)
+            brace.strokeColor = wood.darker(0.22); brace.lineWidth = 4
+            n.addChild(brace)
+        }
+        rect(CGSize(width: 46, height: 5), at: CGPoint(x: 0, y: 17), corner: 2, fill: wood.darker(0.15), in: n)
+        rect(CGSize(width: 46, height: 5), at: CGPoint(x: 0, y: -17), corner: 2, fill: wood.darker(0.15), in: n)
+        return n
+    }
+
+    /// Blimp, ~150 wide. A trampoline you only meet if you get up there.
+    static func blimp() -> SKNode {
+        let n = SKNode()
+        let skin = UIColor(red: 0.95, green: 0.55, blue: 0.35, alpha: 1)
+        let hull = SKShapeNode(ellipseOf: CGSize(width: 150, height: 66))
+        hull.fillColor = skin
+        hull.strokeColor = skin.darker(0.25)
+        hull.lineWidth = 3
+        n.addChild(hull)
+        rect(CGSize(width: 150, height: 9), at: .zero, corner: 4, fill: UIColor(red: 0.98, green: 0.85, blue: 0.4, alpha: 1), stroke: .clear, in: n)
+        // tail fins
+        shape(polygon([CGPoint(x: -66, y: 0), CGPoint(x: -88, y: 24), CGPoint(x: -84, y: 0)]), fill: skin.darker(0.12), in: n)
+        shape(polygon([CGPoint(x: -66, y: 0), CGPoint(x: -88, y: -24), CGPoint(x: -84, y: 0)]), fill: skin.darker(0.12), in: n)
+        // gondola
+        rect(CGSize(width: 44, height: 18), at: CGPoint(x: 4, y: -40), corner: 6,
+             fill: UIColor(red: 0.85, green: 0.88, blue: 0.92, alpha: 1), in: n)
+        for dx in [-14, 14] {
+            let p = CGMutablePath()
+            p.move(to: CGPoint(x: CGFloat(dx) + 4, y: -31))
+            p.addLine(to: CGPoint(x: CGFloat(dx) + 4, y: -26))
+            let line = SKShapeNode(path: p)
+            line.strokeColor = UIColor(red: 0.4, green: 0.4, blue: 0.45, alpha: 1); line.lineWidth = 2
+            n.addChild(line)
+        }
+        for dx in [-12, 12] {
+            circle(4, at: CGPoint(x: CGFloat(dx) + 4, y: -40), fill: UIColor(red: 0.5, green: 0.8, blue: 1, alpha: 1), stroke: .clear, in: n)
+        }
+        return n
+    }
+
+    /// Boost ring, ~92 across. Drawn as a torus seen slightly side-on so flying "through" reads.
+    static func boostRing() -> SKNode {
+        let n = SKNode()
+        let outer = SKShapeNode(ellipseOf: CGSize(width: 62, height: 92))
+        outer.fillColor = .clear
+        outer.strokeColor = UIColor(red: 0.3, green: 0.95, blue: 0.75, alpha: 1)
+        outer.lineWidth = 9
+        n.addChild(outer)
+        let inner = SKShapeNode(ellipseOf: CGSize(width: 62, height: 92))
+        inner.fillColor = .clear
+        inner.strokeColor = UIColor(red: 0.85, green: 1, blue: 0.95, alpha: 0.9)
+        inner.lineWidth = 3
+        n.addChild(inner)
+        for dy in [-46, 46] {
+            shape(polygon([CGPoint(x: -14, y: CGFloat(dy)), CGPoint(x: 0, y: CGFloat(dy) + (dy > 0 ? 14 : -14)), CGPoint(x: 14, y: CGFloat(dy))]),
+                  fill: UIColor(red: 0.98, green: 1, blue: 0.6, alpha: 1), stroke: .clear, in: n)
+        }
+        return n
+    }
+
+    /// Jet stream: a wide band of streaked wind, ~340 across.
+    static func jetStream() -> SKNode {
+        let n = SKNode()
+        let band = SKShapeNode(ellipseOf: CGSize(width: 340, height: 150))
+        band.fillColor = UIColor(red: 0.75, green: 0.92, blue: 1, alpha: 0.16)
+        band.strokeColor = UIColor(red: 0.8, green: 0.96, blue: 1, alpha: 0.35)
+        band.lineWidth = 2
+        n.addChild(band)
+        var seed: UInt32 = 8081
+        for i in 0..<9 {
+            seed = seed &* 1103515245 &+ 12345
+            let y = CGFloat(Int(seed % 110)) - 55
+            let w = 70 + CGFloat((seed >> 9) % 120)
+            let streak = SKShapeNode(rectOf: CGSize(width: w, height: 3), cornerRadius: 1.5)
+            streak.fillColor = UIColor.white.withAlphaComponent(0.55)
+            streak.strokeColor = .clear
+            streak.position = CGPoint(x: CGFloat(i - 4) * 34, y: y)
+            n.addChild(streak)
+            // an arrowhead on the longer streaks, so the direction is unmistakable
+            if w > 140 {
+                shape(polygon([CGPoint(x: w / 2, y: y + 6), CGPoint(x: w / 2 + 12, y: y), CGPoint(x: w / 2, y: y - 6)]),
+                      fill: UIColor.white.withAlphaComponent(0.6), stroke: .clear, in: n)
+            }
+        }
+        return n
+    }
+
+    /// Wispy cirrus for the high cloud deck, ~260 wide.
+    static func cirrus() -> SKNode {
+        let n = SKNode()
+        var seed: UInt32 = 4242
+        for i in 0..<5 {
+            seed = seed &* 1103515245 &+ 12345
+            let w = 90 + CGFloat(seed % 150)
+            let y = CGFloat(Int((seed >> 7) % 40)) - 20
+            let streak = SKShapeNode(rectOf: CGSize(width: w, height: 6 + CGFloat((seed >> 12) % 6)), cornerRadius: 4)
+            streak.fillColor = UIColor.white.withAlphaComponent(0.5)
+            streak.strokeColor = .clear
+            streak.position = CGPoint(x: CGFloat(i - 2) * 46, y: y)
+            n.addChild(streak)
         }
         return n
     }

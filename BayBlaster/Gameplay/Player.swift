@@ -30,6 +30,7 @@ final class Player: SKNode {
     var liftZones = 0
     var downdraftZones = 0
     var whirlpoolZones = 0
+    var jetStreamZones = 0
 
     /// Timed status effects (seconds remaining). Stun: jellyfish sting, no rockets or dive.
     /// Float: popped balloons, reduced gravity.
@@ -61,6 +62,10 @@ final class Player: SKNode {
     var ignoresHazardSlowdown: Bool { activeAbility == .frenzy }
     /// Bristle's puff and Bruno's slam both force the next landing to skip.
     var forcesSkip: Bool { activeAbility == .puff || slamArmed }
+
+    /// Seconds left of the launch tumble. While this is running the spin action owns
+    /// `visual.zRotation`; `update` keeps its hands off so the two don't fight over it.
+    private var tumbleRemaining: CGFloat = 0
 
     private(set) var currentFlightTime: CGFloat = 0
     private(set) var longestFlightTime: CGFloat = 0
@@ -155,6 +160,9 @@ final class Player: SKNode {
 
     var hullFraction: CGFloat { max(0, hull / config.maxHull) }
 
+    /// Height above the water line, in world points.
+    var altitude: CGFloat { max(0, position.y - Tuning.waterY) }
+
     // MARK: - State transitions
 
     func launch(velocity v: CGVector) {
@@ -167,6 +175,7 @@ final class Player: SKNode {
     /// Called by WaterSkipSystem when the boat lands too steep/slow to skip.
     func beginPlowing() {
         guard state == .flying else { return }
+        endTumble()
         state = .plowing
         position.y = Tuning.waterY + Tuning.plowOffsetY
         velocity = CGVector(dx: velocity.dx, dy: 0)
@@ -189,6 +198,7 @@ final class Player: SKNode {
 
     func sink() {
         state = .sunk
+        endTumble()
         endFlightSegment()
         wake.particleBirthRate = 0
         rocketTrail.particleBirthRate = 0
@@ -220,6 +230,22 @@ final class Player: SKNode {
 
     /// Damage after the multipliers, for the "-25" floating label.
     func effectiveDamage(_ amount: CGFloat) -> CGFloat { amount * config.damageMultiplier }
+
+    /// Spin out of the barrel, then hand the rotation back to `update`, which eases it toward
+    /// the direction of travel from wherever the tumble finished.
+    func tumble(turns: CGFloat, seconds: TimeInterval) {
+        guard seconds > 0 else { return }
+        tumbleRemaining = CGFloat(seconds)
+        let spin = SKAction.rotate(byAngle: -.pi * 2 * turns, duration: seconds)
+        spin.timingMode = .easeOut
+        visual.removeAction(forKey: "tumble")
+        visual.run(spin, withKey: "tumble")
+    }
+
+    private func endTumble() {
+        tumbleRemaining = 0
+        visual.removeAction(forKey: "tumble")
+    }
 
     func stun(seconds: CGFloat) {
         stunRemaining = max(stunRemaining, seconds)
@@ -357,6 +383,7 @@ final class Player: SKNode {
         stunRemaining = max(0, stunRemaining - dt)
         floatRemaining = max(0, floatRemaining - dt)
         abilityCooldownRemaining = max(0, abilityCooldownRemaining - dt)
+        tumbleRemaining = max(0, tumbleRemaining - dt)
         if abilityActiveRemaining > 0 {
             abilityActiveRemaining -= dt
             if abilityActiveRemaining <= 0 { abilityActiveRemaining = 0; activeAbility = nil }
@@ -393,6 +420,12 @@ final class Player: SKNode {
                 v.dy += Tuning.birdLift * dt
                 v.dx += Tuning.birdPush * dt
             }
+            if jetStreamZones > 0 {
+                // A river of wind high up: a hard forward shove and just enough lift to keep
+                // you in it, so climbing into one is the pay-off for a big launch.
+                v.dx += Tuning.jetStreamPush * dt
+                v.dy += Tuning.jetStreamLift * dt
+            }
             if downdraftZones > 0 {
                 // With a Storm Sail rigged, a squall drives you along instead of down.
                 if config.stormPushesForward {
@@ -411,9 +444,12 @@ final class Player: SKNode {
             velocity = v
             currentFlightTime += dt
 
-            // Face the direction of travel; a nose-dive pitches further down.
-            let target = clamp(atan2(v.dy, max(v.dx, 1)), -0.9, 0.7) - (isDiving ? 0.25 : 0)
-            visual.zRotation = lerp(visual.zRotation, target, easeFactor(8, dt))
+            // Face the direction of travel; a nose-dive pitches further down. Skipped while the
+            // launch tumble is spinning, which owns the rotation until it finishes.
+            if tumbleRemaining <= 0 {
+                let target = clamp(atan2(v.dy, max(v.dx, 1)), -0.9, 0.7) - (isDiving ? 0.25 : 0)
+                visual.zRotation = lerp(visual.zRotation, target, easeFactor(8, dt))
+            }
 
         case .plowing:
             var v = velocity
