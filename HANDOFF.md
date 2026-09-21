@@ -118,8 +118,9 @@ installs keep stealing the foreground and taps land on the home screen. Boot a s
      and dims the world behind it. Checked on the 16 Pro and 16 Pro Max simulators.)
 2. **Original v1 play-test items still open**: camera `cameraVisibleHeight`, aim sweep periods,
    `skipMaxAngleDegrees`, entity contact radii vs the baked textures, audio levels.
-3. **TestFlight**: pipeline is done; still blocked only on creating the App Store Connect app
-   record for `com.cyberslimer.bayblaster` (`docs/DEVICE_AND_TESTFLIGHT.md`).
+3. **TestFlight**: live. The App Store Connect record exists and `Tools/ship.sh testflight`
+   uploaded 1.0.0 (1) on 2026-09-21. Later uploads get their build number bumped
+   automatically (`manageAppVersionAndBuildNumber` in `ExportOptions.plist`).
 4. **120 Hz check** on a ProMotion device.
 
 ## Balance work done with the simulator
