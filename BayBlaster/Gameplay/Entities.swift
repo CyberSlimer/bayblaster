@@ -432,13 +432,16 @@ final class WorldEntity: SKNode {
         for brick in art.children {
             let dx = CGFloat.random(in: 60...240)
             let dy = CGFloat.random(in: 40...260)
-            brick.run(.sequence([
-                .group([.moveBy(x: dx, y: dy, duration: 0.35),
-                        .rotate(byAngle: CGFloat.random(in: -4...4), duration: 0.6),
-                        .sequence([.wait(forDuration: 0.15), .fadeOut(withDuration: 0.45)]),
-                        .sequence([.wait(forDuration: 0.35), .moveBy(x: dx * 0.5, y: -dy - 200, duration: 0.45)])]),
-                .removeFromParent()
-            ]))
+            // Named locals rather than one nested literal — four levels of implicit-member
+            // SKActions inside a `.group` inside a `.sequence` is a type-checker stressor.
+            let fling = SKAction.moveBy(x: dx, y: dy, duration: 0.35)
+            let spin = SKAction.rotate(byAngle: CGFloat.random(in: -4...4), duration: 0.6)
+            let dim = SKAction.sequence([SKAction.wait(forDuration: 0.15),
+                                         SKAction.fadeOut(withDuration: 0.45)])
+            let drop = SKAction.sequence([SKAction.wait(forDuration: 0.35),
+                                          SKAction.moveBy(x: dx * 0.5, y: -dy - 200, duration: 0.45)])
+            brick.run(SKAction.sequence([SKAction.group([fling, spin, dim, drop]),
+                                         SKAction.removeFromParent()]))
         }
         run(.sequence([.wait(forDuration: 0.9), .removeFromParent()]))
     }

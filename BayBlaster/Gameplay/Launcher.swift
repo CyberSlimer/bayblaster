@@ -254,13 +254,18 @@ final class Launcher: SKNode {
         shockwave.setScale(0.2)
         shockwave.alpha = 0.9
         shockwave.lineWidth = 6
-        shockwave.run(.group([
-            .scale(to: Tuning.launchShockwaveRadius / 20, duration: 0.42),
-            .sequence([.wait(forDuration: 0.08), .fadeOut(withDuration: 0.34)]),
-            .customAction(withDuration: 0.42) { node, elapsed in
-                (node as? SKShapeNode)?.lineWidth = 6 * (1 - CGFloat(elapsed) / 0.42) + 0.5
-            }
-        ]))
+        // Built as named locals rather than one nested literal: a `.group` of implicit-member
+        // actions containing a trailing-closure `.customAction` is the shape that makes Swift's
+        // type checker give up.
+        let ringSpan: TimeInterval = 0.42
+        let grow = SKAction.scale(to: Tuning.launchShockwaveRadius / 20, duration: ringSpan)
+        let fade = SKAction.sequence([SKAction.wait(forDuration: 0.08),
+                                      SKAction.fadeOut(withDuration: 0.34)])
+        let thin = SKAction.customAction(withDuration: ringSpan) { node, elapsed in
+            guard let ring = node as? SKShapeNode else { return }
+            ring.lineWidth = 6 * (1 - elapsed / CGFloat(ringSpan)) + 0.5
+        }
+        shockwave.run(SKAction.group([grow, fade, thin]))
     }
 
     private func updateBarrel() {
