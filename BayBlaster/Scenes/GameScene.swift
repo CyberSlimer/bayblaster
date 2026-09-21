@@ -819,6 +819,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             let name = SKLabelNode.make((done ? "✓  " : "•  ") + r.mission.title, size: 15, font: Tuning.fontMedium,
                                         color: done ? UIColor(red: 0.6, green: 1, blue: 0.6, alpha: 1) : UIColor.white.withAlphaComponent(0.85),
                                         align: .left)
+            // The row's value is right-aligned at +218; keep the title clear of it. Mission
+            // names got longer with the wall and altitude kinds ("Reach 500 m above the water").
+            name.shrinkToFit(width: 360)
             name.position = CGPoint(x: -218, y: rowY)
             panel.addChild(name)
             let status = SKLabelNode.make(r.justCompleted ? "+\(r.mission.reward)" : (done ? "done" : "\(r.progress)/\(r.mission.target)"),
@@ -845,6 +848,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         for (i, a) in achievements.enumerated() {
             let row = SKLabelNode.make("🏆  \(a.title)", size: 14, font: Tuning.fontHeavy,
                                        color: UIColor(red: 1, green: 0.85, blue: 0.35, alpha: 1), align: .left)
+            row.shrinkToFit(width: 360)
             row.position = CGPoint(x: -218, y: rowY)
             panel.addChild(row)
             let value = SKLabelNode.make("+\(a.reward)", size: 14, font: Tuning.fontHeavy,

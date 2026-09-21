@@ -10,6 +10,12 @@ final class ButtonNode: SKNode {
     private let subLabel = SKLabelNode(fontNamed: Tuning.fontMedium)
     private var baseColor: UIColor
     private var tracking = false
+    /// The font sizes the button was built with, and the width its text has to fit inside.
+    /// `shrinkToFit` only ever reduces, so re-fitting after a text change has to start from
+    /// these rather than from whatever the last string shrank the label to.
+    private let baseFontSize: CGFloat
+    private let subBaseFontSize: CGFloat
+    private let textWidth: CGFloat
 
     var isEnabled = true {
         didSet {
@@ -18,9 +24,15 @@ final class ButtonNode: SKNode {
         }
     }
 
+    /// Setting this re-fits the label: several buttons are built with placeholder text and
+    /// given their real, longer string later ("CAST OFF (max all first)", "BUY 12345").
     var text: String {
         get { label.text ?? "" }
-        set { label.text = newValue }
+        set {
+            label.text = newValue
+            label.fontSize = baseFontSize
+            label.shrinkToFit(width: textWidth)
+        }
     }
 
     var subtitle: String? {
@@ -28,6 +40,10 @@ final class ButtonNode: SKNode {
         set {
             subLabel.text = newValue
             subLabel.isHidden = newValue == nil
+            if newValue != nil {
+                subLabel.fontSize = subBaseFontSize
+                subLabel.shrinkToFit(width: textWidth)
+            }
             label.position.y = newValue == nil ? 0 : 7
         }
     }
@@ -35,6 +51,9 @@ final class ButtonNode: SKNode {
     init(text: String, size: CGSize, color: UIColor, fontSize: CGFloat = 22) {
         background = SKShapeNode(rectOf: size, cornerRadius: min(size.height / 2, 16))
         baseColor = color
+        baseFontSize = fontSize
+        subBaseFontSize = fontSize * 0.55
+        textWidth = size.width - 20
         super.init()
         background.fillColor = color
         background.strokeColor = color.darker(0.2)
@@ -46,10 +65,10 @@ final class ButtonNode: SKNode {
         label.fontColor = .white
         label.verticalAlignmentMode = .center
         label.horizontalAlignmentMode = .center
-        label.shrinkToFit(width: size.width - 20)
+        label.shrinkToFit(width: textWidth)
         addChild(label)
 
-        subLabel.fontSize = fontSize * 0.55
+        subLabel.fontSize = subBaseFontSize
         subLabel.fontColor = UIColor.white.withAlphaComponent(0.85)
         subLabel.verticalAlignmentMode = .center
         subLabel.horizontalAlignmentMode = .center

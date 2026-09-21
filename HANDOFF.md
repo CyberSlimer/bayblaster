@@ -106,20 +106,92 @@ Testing gotcha: if another session (e.g. Krunkball) is iterating on the same sim
 installs keep stealing the foreground and taps land on the home screen. Boot a second device
 (`xcrun simctl boot`) and pass `device:` on every simulator-tool call.
 
+## Added 2026-09-21 — the "smash" update (⚠️ NOT YET COMPILED)
+
+Written on Linux again, on top of the compiled locker branch. Three pieces of play-test
+feedback: the launch felt flat, the sky was empty once you got up there, and there was nothing
+to interact with mid-flight.
+
+### Breakable walls (`.barrier`)
+
+The Burrito Bison beat. A wall is a stack of `Tuning.barrierBlockSize` bricks standing on the
+water with a **rectangular** body — the only kind that isn't a circle — and a `toughness`.
+Fast enough and it explodes for coins per brick, keeping 94% of your speed; too slow and it
+stops you where you stand. Tock's shell counts as fast enough, which is finally a reason to
+hold it. Plank → stone → iron reads the toughness from across the bay. Floating supply crates
+(`.crate`) always break, so the mechanic teaches itself before the first real wall.
+
+Barriers are neither boost nor hazard: they sit on their own spawn track and do not count
+toward `hazardsHit` or the "untouched" mission.
+
+### The high air
+
+The low spawn bands stop at 900 points, so any launch that cleared them flew through nothing.
+`WorldSpawner` now runs **three** independent tracks — low, high-air and barrier — and
+`EntityKind.Spec` gained a `highAirWeight` so a kind can appear in both pools at different
+rates. New up there: `.blimp` (a trampoline), `.boostRing` (fly clean through for a shove and
+a payout) and `.jetStream` (a zone that carries you).
+
+`Background` now answers to **altitude** as well as distance: the sky blends toward space, the
+stars and moon come out however early in the day it is, the low cloud deck thins out beneath
+you and a cirrus deck appears above. New altitude readout on the HUD.
+
+### Launch
+
+Anticipation and a harder recoil on the barrel, a charge glow that swells with the power you
+are winding up, trajectory dots that flow along the arc; on firing, a whiteout, a shockwave
+ring, powder smoke, a camera punch-zoom that eases back out as the boat climbs away, and a
+tumble out of the barrel. **The tumble lives in `Player`**, because `Player.update` owns
+`visual.zRotation` every frame — an action running alongside it would have fought it.
+
+### What the simulator caught this round
+
+- **Wall toughness cannot scale steeply with distance.** The first cut did, which parked an
+  unbreakable wall at the end of every run whatever the build: speed in this game tracks your
+  upgrade *tier*, not how far you have flown, and it decays across a run. Measuring
+  speed-vs-distance per tier is what showed it. Gentle ramp, low cap.
+- **Walls were being flown over** — only 4–8% were ever hit. They are taller now, and one in
+  four is a sky gate tall enough to catch a big launch: 22–53% depending on tier.
+- **Smashing at 86% speed cost a max-tier run a third of its distance** over the four or five
+  walls it broke. 94% puts the curve back.
+- A wall you fail to break used to re-hit you every time you crept back into it while grinding
+  to a halt — three or four lots of damage and "TOO SLOW!". It now spends its rejection once.
+
+### Also in this pass
+
+Two new mission kinds (`smashed`, `altitude`) and four new trophies (Wrecker, Demolition Crew,
+High Flyer, Stratospheric). 21 entity kinds, 16 mission kinds, 29 trophies.
+
+`ButtonNode` now re-fits its label whenever `text` is set, not only at init — several buttons
+are built with placeholder text and given their real, longer string later ("CAST OFF (max all
+first)", "BUY 12345"), so the `shrinkToFit` added on the Mac was never reaching them. Resetting
+to a stored base size first matters: `shrinkToFit` only ever reduces, so re-fitting without a
+reset ratchets the font down every refresh.
+
 ## What has NOT been done
 
-1. **Play-test the new layers by hand.** The sim says the numbers are sane and the smoke test
-   says everything fires, but nobody has yet judged feel:
+1. **Compile the smash update.** The locker branch built with one error in ~4,000 lines; this
+   pass adds ~1,000 more that no compiler has seen. It has been script-checked the same way
+   (every `Tuning.` member resolves, every art key has a drawing, every `switch` over
+   `EntityKind` is exhaustive, braces balance) and audited specifically for the `Int`/`Double`
+   mix that was the locker branch's one error — there are none of that shape. Highest-risk
+   spots: the rectangular physics body and brick stacking in `WorldEntity.init`, the three
+   spawn tracks in `WorldSpawner.update`, and `Background.update`'s new `altitude` parameter.
+2. **Feel-check the new mechanics.** Does a wall read as smashable *before* you reach it? Is
+   the plank/stone/iron tier legible at speed? Does a sky gate feel fair or cheap? Is the
+   launch whiteout too strong?
+3. **Play-test the locker layers by hand.** The sim says the numbers are sane and the smoke
+   test says everything fires, but nobody has yet judged feel:
    - Ability button placement/size (`HUD.abilityButtonCentre`, `HUD.abilityButtonRadius`).
    - The rod's green band and the slingshot's red danger zone (`HUD.setLauncherStyle`).
    - Whether the torpedo's low launch reads as exciting or as "I hit the water instantly".
    - Cosmetic: the results card sits over the PUFF button and the milestone flag, and on the
      title screen the DAILY button covers part of the launcher art.
-2. **Original v1 play-test items still open**: camera `cameraVisibleHeight`, aim sweep periods,
+4. **Original v1 play-test items still open**: camera `cameraVisibleHeight`, aim sweep periods,
    `skipMaxAngleDegrees`, entity contact radii vs the baked textures, audio levels.
-3. **TestFlight**: pipeline is done; still blocked only on creating the App Store Connect app
+5. **TestFlight**: pipeline is done; still blocked only on creating the App Store Connect app
    record for `com.cyberslimer.bayblaster` (`docs/DEVICE_AND_TESTFLIGHT.md`).
-4. **120 Hz check** on a ProMotion device.
+6. **120 Hz check** on a ProMotion device.
 
 ## Balance work done with the simulator
 

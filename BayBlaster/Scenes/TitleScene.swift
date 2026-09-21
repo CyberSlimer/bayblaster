@@ -204,6 +204,11 @@ final class TitleScene: SKScene {
         let gear = d.equippedGearItems
         let gearText = gear.isEmpty ? "no gear fitted" : gear.map { $0.displayName }.joined(separator: " + ")
         loadoutLabel.text = "\(crew.displayName) the \(crew.species.lowercased())  ·  \(launcher.displayName)  ·  \(gearText)"
+        // Three parts fitted plus a long launcher name runs off the edge on a narrow phone.
+        // `shrinkToFit` only ever reduces, and this label is reused across refreshes, so reset
+        // the size first or it ratchets down every time the screen reappears.
+        loadoutLabel.fontSize = 13
+        loadoutLabel.shrinkToFit(width: max(200, size.width * 0.62))
 
         let trophies = "\(Achievements.earnedCount)/\(Achievement.allCases.count) trophies"
         prestigeLabel.text = d.prestigeLevel > 0
