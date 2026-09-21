@@ -694,11 +694,11 @@ if __name__ == '__main__':
     LOCKER = [
         ('Bristle', 2_500, 'early'), ('Beach Wheels', 3_000, 'early'),
         ('Coin Magnet', 3_500, 'mid'), ('Pontoons', 4_500, 'mid'), ('Bruno', 5_500, 'mid'),
-        ('Storm Sail', 6_000, 'mid-late'), ('Barnacle Plating', 7_000, 'mid-late'),
-        ('Pip', 8_000, 'mid-late'), ('Box Kite', 9_000, 'mid-late'),
-        ('Spring Keel', 11_000, 'mid-late'), ('Tock', 11_000, 'mid-late'),
-        ('Lucky Horseshoe', 13_000, 'mid-late'), ('Jet Vent', 16_000, 'mid-late'),
-        ('Chum', 17_000, 'mid-late'), ('Rod & Reel', 22_000, 'mid-late'),
+        ('Barnacle Plating', 5_000, 'mid'), ('Box Kite', 5_500, 'mid'),
+        ('Spring Keel', 5_000, 'mid'), ('Lucky Horseshoe', 5_000, 'mid'),
+        ('Pip', 8_000, 'mid-late'), ('Tock', 11_000, 'mid-late'),
+        ('Storm Sail', 16_000, 'mid-late'), ('Chum', 17_000, 'mid-late'),
+        ('Jet Vent', 20_000, 'mid-late'), ('Rod & Reel', 22_000, 'mid-late'),
         ('Gilly', 24_000, 'max'), ('Nixie', 32_000, 'max'),
         ('Tidal Slingshot', 40_000, 'max'), ('Torpedo Tube', 65_000, 'max'),
     ]

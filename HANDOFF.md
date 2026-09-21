@@ -42,11 +42,11 @@ Bought once, then equipped/unequipped freely. Every part is a trade, and every p
 visible on the boat (`Player.addGearArt`).
 
 - **Hull**: Beach Wheels 3,000 (roll on after splashdown), Pontoons 4,500 (+14° skip window,
-  +6% drag), Spring Keel 11,000 (+26% bounce)
-- **Rig**: Storm Sail 6,000 (constant push; squalls blow you along instead of down),
-  Box Kite 9,000 (−16% gravity), Jet Vent 16,000 (+15% rockets and +1)
-- **Trinket**: Coin Magnet 3,500 (60 m pull), Lucky Horseshoe 13,000 (boosts ×2, far more coin
-  arcs), Barnacle Plating 7,000 (−50% damage, −4% launch)
+  +6% drag), Spring Keel 5,000 (+26% bounce)
+- **Rig**: Storm Sail 16,000 (constant push; squalls blow you along instead of down),
+  Box Kite 5,500 (−16% gravity), Jet Vent 20,000 (+15% rockets and +1)
+- **Trinket**: Coin Magnet 3,500 (60 m pull), Lucky Horseshoe 5,000 (boosts ×2, far more coin
+  arcs), Barnacle Plating 5,000 (−50% damage, −4% launch)
 
 ### 3. Launchers (`Core/Launchers.swift`) — 4, each a different aim ritual
 
@@ -219,46 +219,55 @@ launcher and daily modifier measured against a baseline, then the coin economy w
 
 ## Pacing (sim, median of 300 runs, Marlow + cannon + no gear unless stated)
 
-| Build | v1 | now | note |
-|---|---|---|---|
-| Fresh boat, clumsy | ~280 m | **348 m** | |
-| Fresh boat, decent | 280–320 m | **429 m** | |
-| L1 H1 R1 | ~640 m | **889 m** | |
-| Mid-late (L3 H2 R2 A2 U1) | ~1,500 m | **2,014 m** | |
-| Fully upgraded, decent | ~6,500 m | **8,558 m** | 5% of runs sink |
-| Max + best distance build | — | **12,174 m** | Chum + wheels/kite/horseshoe + torpedo, skilled |
-| Max + coin build + prestige 3 | — | 6,694 m / **20,282 coins** | Pip + keel/vent/magnet + rod & reel |
+| Build | v1 | after the locker | now | note |
+|---|---|---|---|---|
+| Fresh boat, clumsy | ~280 m | 348 m | **328 m** | |
+| Fresh boat, decent | 280–320 m | 429 m | **429 m** | |
+| L1 H1 R1 | ~640 m | 889 m | **810 m** | |
+| Mid-late (L3 H2 R2 A2 U1) | ~1,500 m | 2,014 m | **1,836 m** | |
+| Fully upgraded, decent | ~6,500 m | 8,558 m | **6,849 m** | 1% of runs sink |
+| Max + best distance build | — | 12,174 m | **8,843 m** | skilled, 28.8 walls met, 8.6 smashed |
+| Max + coin build + prestige 3 | — | 20,282 coins | **37,440 coins** | 11,737 m — but **69% of runs sink** |
 
-**The whole curve moved up about a third, and that is the abilities.** The shape is unchanged
-and the shop prices are untouched — the greedy-buyer walkthrough still maxes all five tracks in
-15 runs, exactly as it did in v1 — but every rider now has a third verb worth 1.05–1.36×, so a
-run goes further at every tier. If play-testing says the early game got too easy, the cheapest
-dial is `Tuning.abilityTuckCooldown` (Marlow is the only rider a new player has), then the
-per-ability duration/cooldown pairs; do **not** reach for the launch-speed tables, which is
-what the whole upgrade curve is built on.
+Walls cost the curve 10–20%, which is the point of them. The endgame came back down to about
+where v1 sat, and the run is busier: a mid-late run now meets 5.6 walls and smashes 2.
+
+**The one number to look at by hand:** the max-tier coin build (Pip + Spring Keel / Jet Vent /
+Coin Magnet + Rod & Reel, prestige 3) sinks 69% of the time and its spread is enormous
+(p10 3,686 m, p90 25,239 m). That is a glass cannon with no hull gear doing 3,500+ into the
+water, and Barnacle Plating / Bristle / Tock are the answer — so it is arguably working as
+designed. It still wants a human eye on whether losing two runs in three feels like a build
+choice or like a bug.
 
 ### Launcher character (mid-late, skill 0.6 → 0.9)
 
 | Launcher | 0.6 | 0.9 | Identity |
 |---|---|---|---|
-| Cannon | 2,058 | 2,417 | The honest baseline |
-| Rod & Reel | 1,824 | 2,673 | Skill-gated: worse than the cannon until you hit the band |
-| Slingshot | 1,974 | 2,615 | Skill-gated: worse until you stop letting the band snap |
-| Torpedo Tube | 2,656 | 2,927 | ~4.5 PERFECT skips a run vs the cannon's 0.7 — it is the skip-chain launcher |
+| Cannon | 1,783 | 2,053 | The honest baseline |
+| Rod & Reel | 1,829 | 2,331 | Skill-gated: +3% at low skill, +14% once you hit the band |
+| Slingshot | 1,809 | 2,425 | Skill-gated: +1% at low skill, +18% once you stop letting it snap |
+| Torpedo Tube | 1,955 | 2,091 | 6.1 skips and 3.8 PERFECTs a run vs the cannon's 3.2 and 0.3 — and it smashes 5 of the 6 walls it meets, because it flies at wall height |
 
-That the two mid launchers *lose* to the cannon at low skill and beat it at high skill is
-deliberate, and it is the main thing to confirm by hand: a player has to be able to feel the
-band and the draw, or those two are just worse.
+The torpedo turning into the wall-smashing launcher was not designed, it fell out of the
+geometry: it launches flat and low, which is exactly where the walls are.
+
+### Riders and gear (mid-late)
+
+Riders span 1,787–2,196 m; Pip trades distance for 3,718 coins against a 2,152 baseline. Gear
+spans 1,800–2,430 m, and the prices were re-derived from measured value per coin after this
+run: the Storm Sail was the second-strongest part in the game at the cheapest price, and the
+Lucky Horseshoe was the most expensive trinket for a 1.03× run.
 
 ### Locker economy
 
 The five shop tracks max out in 15 runs; the locker is the long tail after that. Every unlock
-costs 3–10 runs of saving at the tier you first want it, ~300,000 coins for all nineteen —
+costs 3–10 runs of saving at the tier you first want it, ~290,000 coins for all nineteen —
 before missions, trophies and the daily, which the simulation does not count. Prestige's
 +25%/level coin multiplier is what makes a second pass quick.
 
 ## Suggested next prompt
 
-> Install BayBlaster on my iPhone with `Tools/ship.sh device` so I can feel out the ability
-> button, the cast band and the slingshot draw; then walk me through creating the App Store
-> Connect record so `Tools/ship.sh testflight` goes through.
+> Build BayBlaster for the Simulator and fix the compile errors — the smash update was
+> written without a Swift toolchain. Then check a wall reads as breakable before you reach it,
+> that a sky gate feels fair, and that the launch whiteout isn't too much. Then install it on
+> my iPhone with `Tools/ship.sh device`.

@@ -279,11 +279,15 @@ enum Tuning {
     static let gearHorseshoeCoinArcBonus: CGFloat = 0.28      // added to coinArcChance
     static let gearBarnacleLaunchMultiplier: CGFloat = 0.96
     static let gearBarnacleDamageMultiplier: CGFloat = 0.5
-    // Cheapest first within a slot, and priced against how much each part measured at.
+    // Priced on measured value per coin, not on flavour. The first cut had the Storm Sail at
+    // 6,000 for a 1.27x run and the Lucky Horseshoe at 13,000 for a 1.03x one — the cheapest
+    // part in the game was the second strongest, and the most expensive trinket was a trap.
+    // Barnacle Plating measures at ~1.0x because a mid-tier run never sinks; it is priced for
+    // what it does at max tier, where the fastest builds drown themselves.
     static let gearPrices: [GearItem: Int] = [
-        .wheels: 3_000, .pontoons: 4_500, .springKeel: 11_000,
-        .stormSail: 6_000, .boxKite: 9_000, .jetVent: 16_000,
-        .coinMagnet: 3_500, .luckyHorseshoe: 13_000, .barnaclePlate: 7_000
+        .wheels: 3_000, .pontoons: 4_500, .springKeel: 5_000,
+        .stormSail: 16_000, .boxKite: 5_500, .jetVent: 20_000,
+        .coinMagnet: 3_500, .luckyHorseshoe: 5_000, .barnaclePlate: 5_000
     ]
 
     // MARK: - Launchers (Core/Launchers.swift)
