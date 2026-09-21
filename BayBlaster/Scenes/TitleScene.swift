@@ -108,22 +108,22 @@ final class TitleScene: SKScene {
         }
         ui.addChild(launchButton)
 
-        shopButton = ButtonNode(text: "SHOP", size: CGSize(width: 170, height: 50), color: UIColor(red: 0.25, green: 0.6, blue: 0.95, alpha: 1))
+        shopButton = ButtonNode(text: "SHOP", size: CGSize(width: 150, height: 50), color: UIColor(red: 0.25, green: 0.6, blue: 0.95, alpha: 1))
         shopButton.action = { [weak self] in
             guard let self = self else { return }
             SceneRouter.present(ShopScene(size: self.size), from: self, reveal: true)
         }
         ui.addChild(shopButton)
 
-        lockerButton = ButtonNode(text: "LOCKER", size: CGSize(width: 170, height: 50), color: UIColor(red: 0.55, green: 0.35, blue: 0.75, alpha: 1))
+        lockerButton = ButtonNode(text: "LOCKER", size: CGSize(width: 150, height: 50), color: UIColor(red: 0.55, green: 0.35, blue: 0.75, alpha: 1))
         lockerButton.action = { [weak self] in
             guard let self = self else { return }
             SceneRouter.present(LockerScene(size: self.size), from: self, reveal: true)
         }
         ui.addChild(lockerButton)
 
-        dailyButton = ButtonNode(text: "DAILY", size: CGSize(width: 150, height: 46),
-                                 color: UIColor(red: 0.2, green: 0.6, blue: 0.45, alpha: 1), fontSize: 18)
+        dailyButton = ButtonNode(text: "DAILY", size: CGSize(width: 150, height: 50),
+                                 color: UIColor(red: 0.2, green: 0.6, blue: 0.45, alpha: 1))
         dailyButton.action = { [weak self] in
             guard let self = self else { return }
             SceneRouter.present(GameScene(size: self.size, daily: self.challenge), from: self)
@@ -170,12 +170,13 @@ final class TitleScene: SKScene {
         }
         muteButton.position = CGPoint(x: right - 28, y: top - 22)
 
-        launchButton.position = CGPoint(x: 0, y: compact ? 16 : 26)
-        // Shop and Locker sit side by side under LAUNCH; Daily gets its own row below.
-        let rowY = launchButton.position.y - (compact ? 54 : 62)
-        shopButton.position = CGPoint(x: -92, y: rowY)
-        lockerButton.position = CGPoint(x: 92, y: rowY)
-        dailyButton.position = CGPoint(x: 0, y: rowY - (compact ? 50 : 56))
+        launchButton.position = CGPoint(x: 0, y: compact ? 30 : 40)
+        // Shop, Daily and Locker share one row under LAUNCH (150 wide, 12 pt gaps). A second
+        // row would sit on the launcher and the boat, which live at the water line below.
+        let rowY = launchButton.position.y - (compact ? 56 : 64)
+        shopButton.position = CGPoint(x: -162, y: rowY)
+        dailyButton.position = CGPoint(x: 0, y: rowY)
+        lockerButton.position = CGPoint(x: 162, y: rowY)
 
         loadoutLabel.position = CGPoint(x: left, y: bottom + 40)
         prestigeLabel.position = CGPoint(x: left, y: bottom + 22)

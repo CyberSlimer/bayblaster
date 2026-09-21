@@ -265,12 +265,14 @@ reset ratchets the font down every refresh.
    - Ability button placement/size (`HUD.abilityButtonCentre`, `HUD.abilityButtonRadius`).
    - The rod's green band and the slingshot's red danger zone (`HUD.setLauncherStyle`).
    - Whether the torpedo's low launch reads as exciting or as "I hit the water instantly".
-   - Cosmetic: the results card sits over the PUFF button and the milestone flag, and on the
-     title screen the DAILY button covers part of the launcher art.
+   - (Fixed 2026-09-21: the title's SHOP / DAILY / LOCKER now share one row so nothing sits on
+     the launcher or the boat, and the results card hides the ability button and flight hint
+     and dims the world behind it. Checked on the 16 Pro and 16 Pro Max simulators.)
 4. **Original v1 play-test items still open**: camera `cameraVisibleHeight`, aim sweep periods,
    `skipMaxAngleDegrees`, entity contact radii vs the baked textures, audio levels.
-5. **TestFlight**: pipeline is done; still blocked only on creating the App Store Connect app
-   record for `com.cyberslimer.bayblaster` (`docs/DEVICE_AND_TESTFLIGHT.md`).
+5. **TestFlight**: live. The App Store Connect record exists and `Tools/ship.sh testflight`
+   uploaded 1.0.0 (1) on 2026-09-21. Later uploads get their build number bumped
+   automatically (`manageAppVersionAndBuildNumber` in `ExportOptions.plist`).
 6. **120 Hz check** on a ProMotion device.
 
 ## Balance work done with the simulator
