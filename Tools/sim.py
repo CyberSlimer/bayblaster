@@ -379,7 +379,7 @@ def run(tiers, player_skill=0.6, crew='marlow', gear=(), prestige=0, daily=None,
             tough = min(BARRIER_MAX_TOUGH, BARRIER_BASE_TOUGH + d_m * BARRIER_TOUGH_PER_M)
             tall = random.random() < BARRIER_TALL_CHANCE
             nblocks = random.randint(*(BARRIER_TALL_BLOCKS if tall else BARRIER_BLOCKS))
-            walls.append([next_wall, BARRIER_BLOCK * nblocks, tough, False])
+            walls.append([next_wall, BARRIER_BLOCK * nblocks, tough, False, False])
             next_wall += random.uniform(*BARRIER_INTERVAL_M) * PPM
 
         stun = max(0.0, stun - DT)
@@ -460,7 +460,7 @@ def run(tiers, player_skill=0.6, crew='marlow', gear=(), prestige=0, daily=None,
 
             # walls: crossed one this step, at a height it actually occupies?
             for wobj in walls:
-                wx, wh, wt, wbroken = wobj
+                wx, wh, wt, wbroken, wrejected = wobj
                 if wbroken or not (prev_x < wx <= x) or y > wh or y < 0:
                     continue
                 spd = math.hypot(vx, vy)
@@ -474,7 +474,9 @@ def run(tiers, player_skill=0.6, crew='marlow', gear=(), prestige=0, daily=None,
                 else:
                     vx *= BARRIER_BOUNCE_MULT
                     vy = min(vy, 0)
-                    hull -= BARRIER_DAMAGE * c['damage']
+                    if not wrejected:          # only the first rejection costs hull
+                        wobj[4] = True
+                        hull -= BARRIER_DAMAGE * c['damage']
                     x = wx - BARRIER_BOUNCE_BACK
                 break
 

@@ -116,6 +116,10 @@ final class WorldEntity: SKNode {
     /// Barriers only: the speed needed to break through, and how many bricks tall the wall is.
     let toughness: CGFloat
     let blocks: Int
+    /// Barriers only: this wall has already turned the boat away once. Grinding to a halt
+    /// against it re-triggers the contact every time you creep back into it, so the hit,
+    /// the damage and the shout are spent once and the wall just blocks after that.
+    private var rejectedOnce = false
     private let art: SKNode
 
     init(kind: EntityKind, toughness: CGFloat = 0, blocks: Int = 0) {
@@ -362,12 +366,15 @@ final class WorldEntity: SKNode {
                 v.dx *= Tuning.barrierBounceSpeedMultiplier
                 v.dy = min(v.dy, 0)
                 player.velocity = v
-                player.position.x -= Tuning.barrierBounceBack     // shove clear so it can't re-trigger
-                scene.damagePlayer(Tuning.barrierDamage, shake: 14)
-                scene.juice(.clang, at: CGPoint(x: position.x, y: player.position.y))
-                art.run(.sequence([.moveBy(x: 7, y: 0, duration: 0.05),
-                                   .moveBy(x: -14, y: 0, duration: 0.08),
-                                   .moveBy(x: 7, y: 0, duration: 0.06)]))
+                player.position.x -= Tuning.barrierBounceBack     // shove clear of the body
+                if !rejectedOnce {
+                    rejectedOnce = true
+                    scene.damagePlayer(Tuning.barrierDamage, shake: 14)
+                    scene.juice(.clang, at: CGPoint(x: position.x, y: player.position.y))
+                    art.run(.sequence([.moveBy(x: 7, y: 0, duration: 0.05),
+                                       .moveBy(x: -14, y: 0, duration: 0.08),
+                                       .moveBy(x: 7, y: 0, duration: 0.06)]))
+                }
                 consumed = false                                   // the wall is still standing
             }
 
