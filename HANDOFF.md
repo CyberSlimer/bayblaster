@@ -113,8 +113,9 @@ installs keep stealing the foreground and taps land on the home screen. Boot a s
    - Ability button placement/size (`HUD.abilityButtonCentre`, `HUD.abilityButtonRadius`).
    - The rod's green band and the slingshot's red danger zone (`HUD.setLauncherStyle`).
    - Whether the torpedo's low launch reads as exciting or as "I hit the water instantly".
-   - Cosmetic: the results card sits over the PUFF button and the milestone flag, and on the
-     title screen the DAILY button covers part of the launcher art.
+   - (Fixed 2026-09-21: the title's SHOP / DAILY / LOCKER now share one row so nothing sits on
+     the launcher or the boat, and the results card hides the ability button and flight hint
+     and dims the world behind it. Checked on the 16 Pro and 16 Pro Max simulators.)
 2. **Original v1 play-test items still open**: camera `cameraVisibleHeight`, aim sweep periods,
    `skipMaxAngleDegrees`, entity contact radii vs the baked textures, audio levels.
 3. **TestFlight**: pipeline is done; still blocked only on creating the App Store Connect app

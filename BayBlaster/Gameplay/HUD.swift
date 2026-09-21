@@ -274,6 +274,13 @@ final class HUD: SKNode {
         abilityShieldPip.isHidden = !visible
     }
 
+    /// Drops the in-flight controls (ability button and the TAP/HOLD hint) once the run is
+    /// over, so the results card is the only thing asking for a tap.
+    func endFlight() {
+        setAbilityVisible(false)
+        pauseHint.isHidden = true
+    }
+
     func configureAbility(_ ability: Ability) {
         abilityLabel.text = ability.buttonLabel
         abilityLabel.fontSize = ability.buttonLabel.count > 5 ? 11 : 13

@@ -684,6 +684,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         player.endFlightSegment()
         hud.setDistance(distanceMetres)
         hud.setCoins(runCoins)
+        hud.endFlight()                   // dead controls once the run is over; the results card lands here
 
         let stats = currentRunStats()
         let isNewBest = SaveManager.shared.recordRun(distance: Double(distanceMetres),
@@ -713,6 +714,11 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                              achievements: [Achievement], dailyOutcome: SaveManager.DailyOutcome?) {
         let overlay = SKNode()
         overlay.zPosition = 2000
+        // A dim scrim over the whole screen so flags, HUD and water behind the card recede.
+        let scrim = SKSpriteNode(color: UIColor(red: 0.02, green: 0.05, blue: 0.12, alpha: 0.45),
+                                 size: CGSize(width: size.width * 2, height: size.height * 2))
+        scrim.zPosition = -1
+        overlay.addChild(scrim)
         let missionRows = missions.count
         let missionBlock = CGFloat(missionRows) * 22 + (missionRows > 0 ? 14 : 0)
         // Trophies won this run get a row each, and a daily run gets one line for its payout.
