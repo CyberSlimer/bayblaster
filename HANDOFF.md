@@ -1,81 +1,27 @@
 # Handoff — resume on the Mac
 
-## ▶ START HERE — next session, on a Mac with Xcode
+## Status (2026-09-21, Mac) — the smash update is compiled and on TestFlight
 
-Two jobs, in order. Everything below this section is background; you do not need it unless
-something breaks.
+- `main` was merged into `claude/game-expansion-unlockables-wlcezz` (the overlap fixes and
+  the first TestFlight upload came from there; the only conflict was this file).
+- The ~1,000 lines of smash-update code written on Linux **compiled clean on the first try**
+  — zero errors, zero warnings — on Xcode 26.6. Neither of the two error shapes the Linux
+  session braced for (`Int`/`Double` mixing, "unable to type-check") turned up.
+- Simulator sanity check (iPhone 16 Pro Max, forced `BB_ANGLE=20 BB_POWER=1`, Bristle +
+  Torpedo Tube): a plank wall at ~460 m read as breakable well before contact, paid
+  `SMASH! +216`, and chained straight into a ×3 combo with a PERFECT skip. That one was a
+  sky gate (14–26 bricks, `barrierTallBlocks`), which is why it ran off the top of the
+  screen. The results card reconciled (505 m, 916 coins). No runtime errors in the console.
+- `Tools/ship.sh testflight` archived Release and uploaded **1.0.0 (4)** to App Store
+  Connect at 13:36 (App Store Connect already held builds 1–3; the build number bumps
+  itself on upload). It appears under TestFlight after processing.
 
-### Job 1 — make it compile
+Still to do by hand, in order — see "What has NOT been done" below for the detail:
 
-```bash
-git checkout claude/game-expansion-unlockables-wlcezz
-git pull
-xcodebuild -project BayBlaster.xcodeproj -scheme BayBlaster \
-  -destination 'generic/platform=iOS Simulator' build 2>&1 \
-  | tee /tmp/bb-build.log | grep -E "(error|warning):" | sort -u
-```
-
-The branch carries the **"smash" update** — roughly 1,000 lines written on Linux with no Swift
-toolchain, which no compiler has seen. The locker update underneath it already built clean.
-
-Fix whatever comes back, then rebuild until there are **zero errors and zero warnings** — this
-project has held zero warnings since the first build and that is worth keeping.
-
-Where the unseen code lives, in rough order of risk:
-
-| File | What is new |
-|---|---|
-| `Gameplay/Entities.swift` | `.barrier` — the only kind with a *rectangular* body; brick stacking in `init`, smash/reject logic in `apply` |
-| `Gameplay/WorldSpawner.swift` | three spawn tracks (low / high-air / barrier) and a `pick` that takes a weight selector |
-| `Gameplay/Background.swift` | `update` gained an `altitude:` parameter (defaulted, so old call sites still compile) |
-| `Gameplay/Launcher.swift` | charge glow, muzzle smoke, shockwave |
-| `Gameplay/Player.swift` | `tumble(turns:seconds:)` and `jetStreamZones` |
-| `Scenes/GameScene.swift` | launch sequence, `debris`, `flash`, four new `JuiceKind` cases |
-| `Core/Art.swift` | 8 new placeholder drawings |
-
-Two known error shapes, both already swept for — mentioned so you recognise them:
-
-- **`Int`/`Double` mixing.** The locker branch's single compile error was
-  `CGFloat(5.5 + i * 3)`. The correct spelling is `CGFloat(i * 3) + 5.5`. I found none of
-  that shape in the new code, but the placeholder drawings are full of loop-index arithmetic.
-- **"unable to type-check this expression in reasonable time."** Deeply nested `SKAction`
-  literals cause this. I hoisted the two worst into named locals; if a third turns up, do the
-  same rather than trying to simplify the expression in place.
-
-Then sanity-check in the Simulator: a wall should read as breakable *before* you reach it,
-a sky gate should feel fair rather than cheap, and the launch whiteout should not be painful.
-
-### Job 2 — TestFlight
-
-**Blocked on a browser step that has never been done.** `xcodebuild` can upload but cannot
-create the App Store Connect record, and an earlier attempt failed with `missingApp` for
-exactly this reason. Whoever owns the Apple ID must, once:
-
-1. Register the bundle id — https://developer.apple.com/account/resources/identifiers/list
-   → **+** → App IDs → App → Description `Bay Blaster`, Bundle ID **Explicit**
-   `com.cyberslimer.bayblaster`. No capabilities.
-2. Create the app — https://appstoreconnect.apple.com/apps → **+ New App** → iOS,
-   name **Bay Blaster**, English (U.S.), that bundle id, SKU `bayblaster`, Full Access.
-
-Then, only once Job 1 is clean:
-
-```bash
-Tools/ship.sh testflight
-```
-
-Archives Release, exports via `ExportOptions.plist` (build number auto-increments), uploads.
-It appears under TestFlight after 5–15 minutes of processing; add yourself to an internal
-group for install without review. Export compliance: the app uses no encryption, answer
-**No** — or add `ITSAppUsesNonExemptEncryption = NO` to `Info.plist` to stop being asked.
-
-Failure modes are listed at the bottom of `docs/DEVICE_AND_TESTFLIGHT.md`.
-
-### Do not
-
-- Re-tune balance. It was measured with `Tools/sim.py`, the numbers are in the pacing table
-  below, and changing a `Tuning` constant without re-running the sim makes that table a lie.
-- Hand-edit the `.pbxproj` file list. The target uses a synchronized folder group; new files
-  under `BayBlaster/` join automatically.
+1. Feel-check the smash mechanics on a real phone (wall legibility at speed, whether a sky
+   gate feels fair, whether the launch whiteout is too strong). Nothing has been re-tuned.
+2. The locker feel items (ability button, cast band, slingshot draw).
+3. Merge this branch into `main` once it has been played.
 
 ---
 
@@ -250,13 +196,7 @@ reset ratchets the font down every refresh.
 
 ## What has NOT been done
 
-1. **Compile the smash update.** The locker branch built with one error in ~4,000 lines; this
-   pass adds ~1,000 more that no compiler has seen. It has been script-checked the same way
-   (every `Tuning.` member resolves, every art key has a drawing, every `switch` over
-   `EntityKind` is exhaustive, braces balance) and audited specifically for the `Int`/`Double`
-   mix that was the locker branch's one error — there are none of that shape. Highest-risk
-   spots: the rectangular physics body and brick stacking in `WorldEntity.init`, the three
-   spawn tracks in `WorldSpawner.update`, and `Background.update`'s new `altitude` parameter.
+1. ~~Compile the smash update.~~ Done 2026-09-21: built clean first time, zero warnings.
 2. **Feel-check the new mechanics.** Does a wall read as smashable *before* you reach it? Is
    the plank/stone/iron tier legible at speed? Does a sky gate feel fair or cheap? Is the
    launch whiteout too strong?
@@ -271,8 +211,8 @@ reset ratchets the font down every refresh.
 4. **Original v1 play-test items still open**: camera `cameraVisibleHeight`, aim sweep periods,
    `skipMaxAngleDegrees`, entity contact radii vs the baked textures, audio levels.
 5. **TestFlight**: live. The App Store Connect record exists and `Tools/ship.sh testflight`
-   uploaded 1.0.0 (1) on 2026-09-21. Later uploads get their build number bumped
-   automatically (`manageAppVersionAndBuildNumber` in `ExportOptions.plist`).
+   has uploaded builds 1–4 of 1.0.0 (build 4, 2026-09-21, is the smash update). The build
+   number bumps itself on upload (`manageAppVersionAndBuildNumber` in `ExportOptions.plist`).
 6. **120 Hz check** on a ProMotion device.
 
 ## Balance work done with the simulator
